@@ -1,2 +1,8 @@
 data/
 .claude/
+
+*.log
+*.out
+*.err
+*.pyc
+.cache/
