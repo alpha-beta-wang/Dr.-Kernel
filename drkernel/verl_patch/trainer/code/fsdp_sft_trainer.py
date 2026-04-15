@@ -56,6 +56,7 @@ from verl.utils.torch_functional import (
     get_wsd_schedule_with_warmup,
 )
 from verl.utils.tracking import Tracking
+from verl.utils.torch_dtypes import PrecisionType
 from verl.utils.ulysses import (
     gather_outputs_and_unpad,
     get_ulysses_sequence_parallel_world_size,
@@ -199,8 +200,15 @@ class FSDPSFTTrainer:
         log_gpu_memory_usage("Before model allocation", logger=logger)
 
         trust_remote_code = self.config.model.trust_remote_code
+        torch_dtype = self.config.model.fsdp_config.get("model_dtype", "fp32")
+        torch_dtype = PrecisionType.to_dtype(torch_dtype)
         # load config first
         config = AutoConfig.from_pretrained(local_model_path, trust_remote_code=trust_remote_code)
+        self.model_config = config
+        if hasattr(self.model_config, "max_position_embeddings"):
+            self.model_config.max_position_embeddings = max(
+                self.model_config.max_position_embeddings, self.config.data.max_length
+            )
         if self.config.ulysses_sequence_parallel_size > 1:
             assert self.use_remove_padding, "Sequence parallel is only supported when remove_padding is enabled"
 
@@ -213,7 +221,7 @@ class FSDPSFTTrainer:
             self.model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
                 local_model_path,
                 config=config,
-                torch_dtype=torch.float32,
+                torch_dtype=torch_dtype,
                 attn_implementation="flash_attention_2",
                 trust_remote_code=trust_remote_code,
             )
@@ -242,14 +250,18 @@ class FSDPSFTTrainer:
                     "bias": "none",
                 }
                 self.model = get_peft_model(self.model, LoraConfig(**lora_config))
+                self.model = self.model.to(torch_dtype)
 
         if self.config.model.enable_gradient_checkpointing:
             self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
 
         log_gpu_memory_usage("After model allocation", logger=logger)
 
+        reduce_buffer_dtype = torch_dtype if torch_dtype in (torch.float16, torch.bfloat16) else torch.float32
         mixed_precision = MixedPrecision(
-            param_dtype=torch.bfloat16, reduce_dtype=torch.float32, buffer_dtype=torch.float32
+            param_dtype=torch_dtype,
+            reduce_dtype=reduce_buffer_dtype,
+            buffer_dtype=reduce_buffer_dtype,
         )
 
         auto_wrap_policy = get_fsdp_wrap_policy(
@@ -415,6 +427,7 @@ class FSDPSFTTrainer:
         log_gpu_memory_usage("Before optimizer zero_grad", logger=logger)
 
         self.optimizer.zero_grad()
+        torch.cuda.empty_cache()
 
         log_gpu_memory_usage("After optimizer zero_grad", logger=logger)
 
@@ -437,6 +450,7 @@ class FSDPSFTTrainer:
             self.optimizer.step()
 
         log_gpu_memory_usage("After optimizer step", logger=logger)
+        torch.cuda.empty_cache()
 
         self.lr_scheduler.step()
 
