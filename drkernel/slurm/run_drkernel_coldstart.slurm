@@ -4,7 +4,7 @@
 #SBATCH -o ../logs/drk-sft-%j.out
 #SBATCH -e ../logs/drk-sft-%j.err
 #SBATCH -p r8nv-gpu-hw
-#SBATCH -t 1-00:00:00
+#SBATCH -t 1-6:00:00
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:4
 #SBATCH --gres-flags=enforce-binding
@@ -43,6 +43,9 @@ print_error_lines() {
 
 on_exit() {
     local exit_code=$?
+    if [[ -n "${GPU_MONITOR_PID:-}" ]]; then
+        kill "${GPU_MONITOR_PID}" >/dev/null 2>&1 || true
+    fi
     log_section "JOB SUMMARY"
     echo "Exit code: ${exit_code}"
     echo "End time: $(date '+%Y-%m-%d %H:%M:%S')"
@@ -96,7 +99,11 @@ export MICRO_BATCH_SIZE_PER_GPU=1
 export SP_SIZE=2
 export WANDB_MODE=offline
 export MAX_LENGTH="${MAX_LENGTH:-12288}"
+export SAVE_FREQ="${SAVE_FREQ:-100}"
+export CPU_OFFLOAD="${CPU_OFFLOAD:-True}"
+export OFFLOAD_PARAMS="${OFFLOAD_PARAMS:-True}"
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True,max_split_size_mb:256}"
+export GPU_MONITOR_INTERVAL="${GPU_MONITOR_INTERVAL:-60}"
 
 export HF_HOME="${PROJECT_DIR}/.cache/huggingface"
 export TRANSFORMERS_CACHE="${PROJECT_DIR}/.cache/huggingface/transformers"
@@ -118,7 +125,11 @@ echo "TRAIN_BATCH_SIZE=${TRAIN_BATCH_SIZE}"
 echo "MICRO_BATCH_SIZE_PER_GPU=${MICRO_BATCH_SIZE_PER_GPU}"
 echo "SP_SIZE=${SP_SIZE}"
 echo "MAX_LENGTH=${MAX_LENGTH}"
+echo "SAVE_FREQ=${SAVE_FREQ}"
+echo "CPU_OFFLOAD=${CPU_OFFLOAD}"
+echo "OFFLOAD_PARAMS=${OFFLOAD_PARAMS}"
 echo "PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF}"
+echo "GPU_MONITOR_INTERVAL=${GPU_MONITOR_INTERVAL}"
 echo "HF_HOME=${HF_HOME}"
 echo "TMPDIR=${TMPDIR}"
 
@@ -157,5 +168,22 @@ for name in mods:
         raise
 PY
 
+gpu_monitor() {
+    while true; do
+        echo
+        echo "===== GPU MEMORY SNAPSHOT $(date '+%Y-%m-%d %H:%M:%S') ====="
+        nvidia-smi --format=csv --query-gpu=index,uuid,name,utilization.gpu,memory.used,memory.total || true
+        echo "--- compute apps ---"
+        nvidia-smi --query-compute-apps=gpu_uuid,pid,process_name,used_memory --format=csv,noheader || true
+        sleep "${GPU_MONITOR_INTERVAL}"
+    done
+}
+
+gpu_monitor &
+GPU_MONITOR_PID=$!
+
 log_section "START TRAINING"
-bash "${PROJECT_DIR}/local_ops/run_coldstart.sh" "$@"
+# bash "${PROJECT_DIR}/local_ops/run_coldstart.sh" "$@"
+bash "${PROJECT_DIR}/local_ops/run_coldstart.sh" "$@" | awk '{
+    printf "=== [TRAINING INFO] %s %s ===\n", strftime("%Y-%m-%d %H:%M:%S"), $0
+}'
