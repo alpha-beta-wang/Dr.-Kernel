@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/common_env.sh"
 
@@ -53,6 +53,15 @@ N_GPUS_PER_NODE="${N_GPUS_PER_NODE:-${SLURM_GPUS_ON_NODE:-8}}"
 
 export WANDB_MODE="${WANDB_MODE:-offline}"
 export REWARD_SERVER_URL="${REWARD_SERVER_URL:-${KERNELGYM_SERVER_URL}}"
+export SERVER_WITH_TRAINING="${SERVER_WITH_TRAINING:-False}"
+export SERVER_WITH_TRAINING_NODES="${SERVER_WITH_TRAINING_NODES:-0}"
+unset ROCR_VISIBLE_DEVICES
+unset HIP_VISIBLE_DEVICES
+export TMPDIR="${TMPDIR:-/tmp/drkernel-rl-${SLURM_JOB_ID:-local}}"
+export TEMP="${TEMP:-${TMPDIR}}"
+export TMP="${TMP:-${TMPDIR}}"
+export RAY_TMPDIR="${RAY_TMPDIR:-${TMPDIR}/ray}"
+mkdir -p "${TMPDIR}" "${RAY_TMPDIR}"
 
 # shellcheck disable=SC1091
 source "${DRKERNEL_ROOT}/kernel/scripts/rl/train_rl_common.sh"

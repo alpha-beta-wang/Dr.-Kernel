@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/common_env.sh"
 
@@ -31,9 +31,9 @@ start_kernelgym_services() {
     export TRANSFORMERS_CACHE="${project_dir}/.cache/huggingface/transformers"
     export HUGGINGFACE_HUB_CACHE="${project_dir}/.cache/huggingface/hub"
     export TRITON_CACHE_DIR="${project_dir}/.cache/triton"
-    export TMPDIR="${tmp_dir}"
-    export TEMP="${tmp_dir}"
-    export TMP="${tmp_dir}"
+    export TMPDIR="${TMPDIR:-${tmp_dir}}"
+    export TEMP="${TEMP:-${TMPDIR}}"
+    export TMP="${TMP:-${TMPDIR}}"
     mkdir -p "${HF_HOME}" "${TRANSFORMERS_CACHE}" "${HUGGINGFACE_HUB_CACHE}" "${TRITON_CACHE_DIR}"
 
     export REDIS_HOST="${REDIS_HOST:-127.0.0.1}"
