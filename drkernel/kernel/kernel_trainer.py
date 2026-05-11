@@ -1665,6 +1665,31 @@ class RayKernelTrainer(RayPPOTrainer):
             truncation="error",
             system_prompt_config=self.config.data.get("system_prompt_config", None),
         )
+        if len(self.val_dataset) == 0:
+            print(
+                "Warning: validation dataset became empty after prompt-length filtering; "
+                "rebuilding validation dataset with truncation fallback."
+            )
+            self.val_dataset = RLHFDataset(
+                parquet_files=self.config.data.val_files,
+                tokenizer=self.tokenizer,
+                processor=self.processor,
+                prompt_key=self.config.data.prompt_key,
+                image_key=self.config.data.get("image_key", "images"),
+                max_prompt_length=self.config.data.max_prompt_length,
+                filter_prompts=False,
+                filter_overlong_prompts=False,
+                sample_size=self.config.data.val_sample_size,
+                apply_chat_template=self.config.data.apply_chat_template,
+                return_raw_chat=self.config.data.get("return_raw_chat", False),
+                truncation=self.config.data.get("validation_truncation", "left"),
+                system_prompt_config=self.config.data.get("system_prompt_config", None),
+            )
+        if len(self.val_dataset) == 0:
+            raise ValueError(
+                "Validation dataset is empty even after truncation fallback. "
+                "Please check validation data files or prompt formatting."
+            )
         self.val_dataloader = StatefulDataLoader(
             dataset=self.val_dataset,
             # Validation uses whole batch for memory scheduling
