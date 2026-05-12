@@ -905,6 +905,8 @@ def main(config):
 def run_generation(config):
     if not ray.is_initialized():
         # this is for local ray cluster
+        os.environ.pop("ROCR_VISIBLE_DEVICES", None)
+        os.environ.pop("HIP_VISIBLE_DEVICES", None)
         ray.init(runtime_env={'env_vars': {'TOKENIZERS_PARALLELISM': 'true', 'NCCL_DEBUG': 'WARN'}})
 
     return ray.get(main_task.remote(config))
