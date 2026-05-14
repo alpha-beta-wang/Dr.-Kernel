@@ -1161,7 +1161,7 @@ def main_task(config):
                 process_on_nodes=[config.trainer.n_gpus_per_node] * config.trainer.nnodes,
                 use_gpu=True,
                 max_colocate_count=1,
-                name_prefix="global_pool",
+                name_prefix=f"global_pool_" + os.environ.get("SLURM_JOB_ID", "local") + "_" + uuid4().hex[:8],
             )
             wg = RayWorkerGroup(resource_pool=resource_pool, ray_cls_with_init=ray_cls_with_init)
             wg.init_model()
