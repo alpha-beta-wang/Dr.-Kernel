@@ -187,153 +187,129 @@ class AsyncKernelRewardManager:
         
         return results
 
-    # def __call__(self, data: DataProto, return_dict: bool = False, **kwargs):
-    def __call__(self, 
-                response_ids: list[int], 
-                response_str: str, 
-                ground_truth: str, 
-                entry_point: str, 
-                uuid: str, 
-                return_dict: bool = True,
-                return_full_state: bool = False,
-                **kwargs):
-        """
-        Async reward manager for kernel code RL training
 
-        Only pass necessary data to the reward manager to keep efficient in async mode.
-        
-        Args:
-            response_ids: Response token ids
-            response_str: Response string
-            ground_truth: Ground truth
-            entry_point: Entry point
-            uuid: UUID
-            return_dict: Whether to return a dictionary
-            **kwargs: Additional keyword arguments for the reward function
-        Returns:
-            Reward tensor or a dictionary containing reward information
-        """
-        # 如果已经有 rm_scores，直接返回
-        # if "rm_scores" in data.batch.keys():
-        #     if return_dict:
-        #         return {"reward_tensor": data.batch["rm_scores"]}
-        #     else:
-        #         return data.batch["rm_scores"]
 
-        # 初始化返回张量，长度与响应截断长度一致，避免在后续裁剪时丢失分数
+
+
+    def __call__(self, data, return_dict: bool = True, **kwargs):
+        import json as _json
+        if hasattr(data, "batch") and hasattr(data, "non_tensor_batch"):
+            if "rm_scores" in data.batch.keys():
+                return {"reward_tensor": data.batch["rm_scores"]} if return_dict else data.batch["rm_scores"]
+            response_ids = data.batch["responses"]
+            sequences_strs = self.tokenizer.batch_decode(response_ids, skip_special_tokens=True)
+            ground_truths = [((_json.loads(d.non_tensor_batch.get("reward_model", {})) if isinstance(d.non_tensor_batch.get("reward_model", {}), str) else d.non_tensor_batch.get("reward_model", {})).get("ground_truth", "")) for d in data]
+            extra_infos = [((_json.loads(d.non_tensor_batch.get("extra_info", {})) if isinstance(d.non_tensor_batch.get("extra_info", {}), str) else d.non_tensor_batch.get("extra_info", {})) or {}) for d in data]
+            entry_points = [ei.get("entry_point", "Model") for ei in extra_infos]
+            uuids = [d.non_tensor_batch.get("uid", str(i)) for i, d in enumerate(data)]
+            prompt_length = data.batch["prompts"].shape[-1]
+            valid_response_length = data.batch["attention_mask"][:, prompt_length:].sum(dim=-1)
+            reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
+            reward_extra_info = {"correctness": [], "performance": [], "is_speedup_positive": [], "is_decoy_kernel": [], "compilation": [], "success": [], "status": [], "error": [], "num_custom_kernel": [], "num_total_kernels": [], "num_coverage": [], "custom_kernel_cuda_time_in_profiling_us": [], "total_kernel_run_time_in_profiling_us": [], "time_coverage": [], "correctness_tensor": [], "performance_tensor": [], "compilation_tensor": []}
+            for i in range(len(data)):
+                rids = response_ids[i].tolist() if hasattr(response_ids[i], "tolist") else response_ids[i]
+                results = self.execute_env(sequences_strs[i], ground_truths[i], entry_points[i], str(uuids[i]) if uuids[i] else str(i), rids)
+                result = results[0]
+                score = result.get("score", result.get("reward", 0.0))
+                speedup = result.get("speedup", 0.0) or 0.0
+                if speedup > self.reward_config.speedup_reward_upper_bound:
+                    print(f"[DEBUG] speedup is anomaly large, re-execute the environment")
+                    results = self.execute_env(sequences_strs[i], ground_truths[i], entry_points[i], str(uuids[i]) if uuids[i] else str(i), rids)
+                    result = results[0]
+                    speedup = result.get("speedup", 0.0) or 0.0
+                    score = result.get("score", result.get("reward", 0.0))
+                ti = int(valid_response_length[i].item()) - 1
+                if ti >= 0:
+                    reward_tensor[i, ti] = score
+                reward_extra_info["correctness"].append(result.get("correctness", False))
+                reward_extra_info["performance"].append(speedup)
+                reward_extra_info["is_speedup_positive"].append(speedup >= 1.0 + self.reward_config.speedup_eps)
+                reward_extra_info["is_decoy_kernel"].append(result.get("decoy_kernel", False))
+                reward_extra_info["compilation"].append(result.get("compiled", False))
+                reward_extra_info["success"].append(result.get("success", False))
+                reward_extra_info["status"].append(result.get("status", "unknown"))
+                reward_extra_info["error"].append(result.get("error"))
+                nc = result.get("num_custom_kernel", 0); nt = result.get("num_total_kernels", 0)
+                reward_extra_info["num_custom_kernel"].append(nc)
+                reward_extra_info["num_total_kernels"].append(nt)
+                reward_extra_info["num_coverage"].append(float(f"{(nc / nt if nt > 0 else 0):.2f}"))
+                ck = result.get("custom_kernel_cuda_time_in_profiling_us", 0); tk = result.get("total_kernel_run_time_in_profiling_us", 0)
+                reward_extra_info["custom_kernel_cuda_time_in_profiling_us"].append(ck)
+                reward_extra_info["total_kernel_run_time_in_profiling_us"].append(tk)
+                reward_extra_info["time_coverage"].append(float(f"{(ck / tk if tk > 0 else 0):.2f}"))
+                reward_extra_info["correctness_tensor"].append(float(result.get("correctness", False)))
+                reward_extra_info["performance_tensor"].append(float(speedup))
+                reward_extra_info["compilation_tensor"].append(float(result.get("compiled", False)))
+                if self.print_status:
+                    self.logger.info(
+                        "[KernelEvalStatus] idx=" + str(i) +
+                        " status=" + str(result.get("status", "unknown")) +
+                        " compiled=" + str(result.get("compiled", False)) +
+                        " correct=" + str(result.get("correctness", False)) +
+                        " speedup=" + str(speedup) +
+                        " uuid=" + str(uuids[i]) +
+                        " entry=" + str(entry_points[i]) +
+                        " error=" + str(result.get("error"))
+                    )
+            return {"reward_tensor": reward_tensor, "extra_info": reward_extra_info} if return_dict else reward_tensor
+        return_full_state = kwargs.get("return_full_state", False)
+        response_str = kwargs.get("response_str", "")
+        ground_truth = kwargs.get("ground_truth", "")
+        entry_point = kwargs.get("entry_point", "")
+        uuid = kwargs.get("uuid", "")
+        response_ids = kwargs.get("response_ids", data if isinstance(data, list) else [data])
         max_response_length = kwargs.get("response_length")
-        valid_response_length = len(response_ids)
+        vr = len(response_ids)
         if max_response_length is not None:
-            valid_response_length = min(valid_response_length, int(max_response_length))
-        valid_response_length = max(valid_response_length, 1)
-
-        reward_tensor = torch.zeros(valid_response_length, dtype=torch.float32)
-        # reward_extra_info = defaultdict(list)
-        reward_extra_info = {}
-
-        # 性能指标张量
-        correctness_tensor = torch.zeros(1, dtype=torch.float32)
-        performance_tensor = torch.zeros(1, dtype=torch.float32)
-        compilation_tensor = torch.zeros(1, dtype=torch.float32)
-        
-        already_print_data_sources = {}
-        
+            vr = min(vr, int(max_response_length))
+        vr = max(vr, 1)
+        rt = torch.zeros(vr, dtype=torch.float32)
+        rei = {}
         print(f"[DEBUG] entry point in reward manager: {entry_point}")
-        
-        # 使用计算函数进行评估
-
         results = self.execute_env(response_str, ground_truth, entry_point, uuid, response_ids)
-
-        speedup = results[0].get("speedup", 0.0)
-
-        if speedup is None:
-            speedup = 0.0
-
-        if speedup > self.reward_config.speedup_reward_upper_bound:
+        sp = results[0].get("speedup", 0.0) or 0.0
+        if sp > self.reward_config.speedup_reward_upper_bound:
             print(f"[DEBUG] speedup is anomaly large, re-execute the environment")
             results = self.execute_env(response_str, ground_truth, entry_point, uuid, response_ids)
-            speedup = results[0].get("speedup", 0.0)
-
-        results = results[0]
-
-        score = results.get("score", results.get("reward", 0.0))
-        num_custom_kernel = results.get("num_custom_kernel", 0)
-        num_total_kernels = results.get("num_total_kernels", 0)
-        custom_kernel_cuda_time_in_profiling_us = results.get("custom_kernel_cuda_time_in_profiling_us", 0)
-        total_kernel_run_time_in_profiling_us = results.get("total_kernel_run_time_in_profiling_us", 0)
-        correctness = results.get("correctness", False)
-        success = results.get("success", False)
-        compiled = results.get("compiled", False)
-        speedup = results.get("speedup", 0.0)
-        if speedup is None:
-            speedup = 0.0
-        status = results.get("status", "unknown")
-        err_msg = results.get("error")
-        is_speedup_positive = (speedup >= 1.0 + self.reward_config.speedup_eps)
-        is_decoy_kernel = results.get("decoy_kernel", False)
-
-        target_index = valid_response_length - 1
-        reward_tensor[target_index] = score
-        correctness_tensor[0] = float(correctness)
-        performance_tensor[0] = speedup
-        compilation_tensor[0] = float(compiled)
-
-        reward_extra_info["correctness"] = correctness
-        reward_extra_info["performance"] = speedup
-        reward_extra_info["is_speedup_positive"] = is_speedup_positive
-        reward_extra_info["is_decoy_kernel"] = is_decoy_kernel
-        reward_extra_info["compilation"] = compiled
-        reward_extra_info["success"] = success
-        reward_extra_info["status"] = status
-        reward_extra_info["error"] = err_msg
-        
-        print(f"[DEBUG] num_custom_kernel in reward manager: {num_custom_kernel}")
-        print(f"[DEBUG] num_total_kernels in reward manager: {num_total_kernels}")
-        print(f"[DEBUG] custom_kernel_cuda_time_in_profiling_us in reward manager: {custom_kernel_cuda_time_in_profiling_us}")
-        print(f"[DEBUG] total_kernel_run_time_in_profiling_us in reward manager: {total_kernel_run_time_in_profiling_us}")
-        # new features
-        reward_extra_info["num_custom_kernel"] = num_custom_kernel
-        reward_extra_info["num_total_kernels"] = num_total_kernels
-        num_coverage = 0
-        if num_total_kernels > 0:
-            num_coverage = num_custom_kernel / num_total_kernels
-        reward_extra_info["num_coverage"] = float(f"{num_coverage:.2f}")
-        reward_extra_info["custom_kernel_cuda_time_in_profiling_us"] = custom_kernel_cuda_time_in_profiling_us
-        reward_extra_info["total_kernel_run_time_in_profiling_us"] = total_kernel_run_time_in_profiling_us
-        time_coverage = 0
-        if total_kernel_run_time_in_profiling_us > 0:
-            time_coverage = custom_kernel_cuda_time_in_profiling_us / total_kernel_run_time_in_profiling_us
-        reward_extra_info["time_coverage"] = float(f"{time_coverage:.2f}")
-
-        # reward_extra_info["correctness"].append(correctness)
-        # reward_extra_info["performance"].append(speedup)
-        # reward_extra_info["is_speedup_positive"].append(is_speedup_positive)
-        # reward_extra_info["is_decoy_kernel"].append(is_decoy_kernel)
-        # reward_extra_info["compilation"].append(compiled)
-        # reward_extra_info["success"].append(success)
-        # reward_extra_info.setdefault("status", []).append(status)
-        # reward_extra_info.setdefault("error", []).append(err_msg or "")
-
+        result = results[0]
+        sp = result.get("speedup", 0.0) or 0.0
+        score = result.get("score", result.get("reward", 0.0))
+        rt[vr - 1] = score
+        rei["correctness"] = result.get("correctness", False)
+        rei["performance"] = sp
+        rei["is_speedup_positive"] = (sp >= 1.0 + self.reward_config.speedup_eps)
+        rei["is_decoy_kernel"] = result.get("decoy_kernel", False)
+        rei["compilation"] = result.get("compiled", False)
+        rei["success"] = result.get("success", False)
+        rei["status"] = result.get("status", "unknown")
+        rei["error"] = result.get("error")
+        nc = result.get("num_custom_kernel", 0); nt = result.get("num_total_kernels", 0)
+        rei["num_custom_kernel"] = nc; rei["num_total_kernels"] = nt
+        rei["num_coverage"] = float(f"{(nc / nt if nt > 0 else 0):.2f}")
+        ck = result.get("custom_kernel_cuda_time_in_profiling_us", 0); tk = result.get("total_kernel_run_time_in_profiling_us", 0)
+        rei["custom_kernel_cuda_time_in_profiling_us"] = ck; rei["total_kernel_run_time_in_profiling_us"] = tk
+        rei["time_coverage"] = float(f"{(ck / tk if tk > 0 else 0):.2f}")
+        print(f"[DEBUG] num_custom_kernel in reward manager: {nc}")
+        print(f"[DEBUG] num_total_kernels in reward manager: {nt}")
+        print(f"[DEBUG] custom_kernel_cuda_time_in_profiling_us in reward manager: {ck}")
+        print(f"[DEBUG] total_kernel_run_time_in_profiling_us in reward manager: {tk}")
+        rei["correctness_tensor"] = torch.tensor([float(result.get("correctness", False))])
+        rei["performance_tensor"] = torch.tensor([float(sp)])
+        rei["compilation_tensor"] = torch.tensor([float(result.get("compiled", False))])
         if self.print_status:
-            self.logger.info(f"[KernelEvalStatus] idx={0} status={status} compiled={compiled} correct={correctness} speedup={speedup} uuid={uuid} entry={entry_point} error={err_msg}")
-
+            self.logger.info(
+                "[KernelEvalStatus] idx=0"
+                " status=" + str(rei.get("status", "unknown")) +
+                " compiled=" + str(rei.get("compilation", False)) +
+                " correct=" + str(rei.get("correctness", False)) +
+                " speedup=" + str(sp) +
+                " uuid=" + str(uuid) +
+                " entry=" + str(entry_point) +
+                " error=" + str(rei.get("error"))
+            )
         if return_dict:
-            reward_extra_info["correctness_tensor"] = correctness_tensor
-            reward_extra_info["performance_tensor"] = performance_tensor
-            reward_extra_info["compilation_tensor"] = compilation_tensor
-            
-
-            return_dict = {
-                "reward_tensor": reward_tensor,
-                "reward_extra_info": reward_extra_info,
-            }
-
+            ret = {"reward_tensor": rt, "reward_extra_info": rei}
             if return_full_state:
-                return_dict["env_state"] = results
-
-            return return_dict
-        else:
-            if return_full_state:
-                return reward_tensor, reward_extra_info, results
-            else:
-                return reward_tensor, reward_extra_info
+                ret["env_state"] = result
+            return ret
+        return (rt, rei, result) if return_full_state else (rt, rei)
