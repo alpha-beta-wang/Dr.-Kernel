@@ -410,14 +410,26 @@ class UnifiedMetricsSystem:
         metrics = {}
 
         for key, sequence_extra in extra_rewards_info.items():
-            metrics.update(
-                {
-                    f'critic/rewards_extra/{key}/mean': np.mean(sequence_extra),
-                    f'critic/rewards_extra/{key}/max': np.max(sequence_extra),
-                    f'critic/rewards_extra/{key}/min': np.min(sequence_extra),
-                    f'critic/rewards_extra/{key}/var': np.var(sequence_extra),
-                }
-            )
+            try:
+                vals = sequence_extra
+                if isinstance(vals, list) and len(vals) > 0:
+                    if isinstance(vals[0], torch.Tensor):
+                        vals = [v.item() if v.numel() == 1 else v.tolist() for v in vals]
+                arr = np.asarray(vals, dtype=np.float64)
+                if not np.isfinite(arr).all():
+                    arr = arr[np.isfinite(arr)]
+                if len(arr) == 0:
+                    continue
+                metrics.update(
+                    {
+                        f'critic/rewards_extra/{key}/mean': np.mean(arr),
+                        f'critic/rewards_extra/{key}/max': np.max(arr),
+                        f'critic/rewards_extra/{key}/min': np.min(arr),
+                        f'critic/rewards_extra/{key}/var': np.var(arr),
+                    }
+                )
+            except (ValueError, TypeError):
+                pass
 
         return metrics
 
