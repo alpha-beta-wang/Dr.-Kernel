@@ -126,7 +126,7 @@ def compute_kernel_reward_batch(solution_strs: list, ground_truths: list, entry_
         enable_profiling = getattr(reward_config, "enable_profiling")
         verbose_errors = getattr(reward_config, "verbose_errors")
         detect_decoy_kernel = getattr(reward_config, "detect_decoy_kernel")
-        reference_backend = getattr(reward_config, "reference_backend")
+        reference_backend = getattr(reward_config, "reference_backend", None)
         
         for i, solution_str in enumerate(solution_strs):
             # reference_code = extract_reference_code(solution_str)
