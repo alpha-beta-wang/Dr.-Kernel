@@ -6,3 +6,8 @@ data/
 *.err
 *.pyc
 .cache/
+outputs/
+wandb/
+.tmp/
+.env
+redis.conf
