@@ -10,6 +10,17 @@
 #SBATCH --gres-flags=enforce-binding
 #SBATCH --qos=gpu-long
 #SBATCH --cpus-per-task=16
+#
+# --- SLURM tuning for constrained environments ---
+# If you have fewer GPU quota or shorter time limit, adjust these:
+#   --gres=gpu:8              # reduce to 8 GPUs if 16 is unavailable
+#   -t 6:00:00                # shorter walltime (gpu-short QoS max 6h)
+#   --qos=gpu-short           # use if gpu-long is not available
+#   --constraint="A100|L40|L40S"  # exclude 24GB GPUs (A30) to prevent OOM
+#   --exclude=<hostname>      # exclude specific problematic nodes
+#   --cpus-per-task=32        # increase CPU if running Ray + KernelGYM together
+#
+# Log output paths also need to change if you lack write permission to /workspace/I/
 
 set -euo pipefail
 
@@ -72,6 +83,7 @@ ulimit -l unlimited
 ulimit -v unlimited
 ulimit -n 65535
 ulimit -u 4125556
+# If ulimit -u 4125556 fails on restricted accounts, use: ulimit -u 65535 2>/dev/null || true
 
 source /tools/module_env.sh
 module purge
@@ -90,27 +102,60 @@ module list || true
 cluster-quota || true
 nvidia-smi --format=csv --query-gpu=index,name,driver_version,memory.total || true
 
+# --- Path configuration ---
+# These paths must be writable by your user. If you don't have access to
+# qimeng6's directories, change PROJECT_DIR and DRKERNEL_DATA_ROOT to your
+# own locations (e.g. /share/personal/S/<user>/KernelGYM-hls/drkernel).
+# Also add: export PATH="$HOME/.local/bin:$PATH" if you have pip user installs.
 PROJECT_DIR="/workspace/I/qimeng6/WangYongsheng/KernelGYM/drkernel"
 cd "${PROJECT_DIR}"
 
 export SLURM_GPUS_ON_NODE=16
+# For 8-GPU setup, set SLURM_GPUS_ON_NODE=8 and see batch size / TP notes below.
+
 export DRKERNEL_DATA_ROOT="/nfs_global/I/qimeng6/WangYongsheng/drkernel"
 export RL_MODEL_PATH="${DRKERNEL_DATA_ROOT}/models/hkust-nlp/drkernel-14b"
 export RUN_NAME="drkernel-14b-rl-4gpu"
 export N_GPUS_PER_NODE="${SLURM_GPUS_ON_NODE:-4}"
 export NNODES="${SLURM_NNODES:-1}"
 export GPU_MONITOR_INTERVAL="${GPU_MONITOR_INTERVAL:-60}"
+
+# --- Batch size ---
+# TRAIN_BATCH_SIZE and PPO_MINI_BATCH_SIZE must be >= N_GPUS_PER_NODE when
+# running with FSDP + device_mesh, otherwise ppo_mini_batch_size rounds to 0.
+#   16 GPUs → batch >= 16
+#    8 GPUs → batch >= 8
 export TRAIN_BATCH_SIZE=2
 export PPO_MINI_BATCH_SIZE=2
+
+# --- Sequence lengths ---
+# MAX_RESPONSE_LENGTH can be reduced (e.g. 256) to save VRAM on smaller GPUs.
+# MAX_PROMPT_LENGTH may need to be increased (e.g. 2048) for thinking-format
+# prompts that exceed the default 1152 tokens.
 export MAX_PROMPT_LENGTH="${MAX_PROMPT_LENGTH:-1152}"
 export MAX_RESPONSE_LENGTH="${MAX_RESPONSE_LENGTH:-512}"
+
 export ROLLOUT_N="${ROLLOUT_N:-1}"
+
+# --- GPU memory utilization ---
+# Lower this if you see OOM during rollout. Values that work:
+#   0.74  — 16x A100/L40S (plenty of VRAM)
+#   0.50  —  8x L40 (needs FSDP offload headroom)
 export ROLLOUT_GPU_MEMORY_UTIL="${ROLLOUT_GPU_MEMORY_UTIL:-0.74}"
+
 export ROLLOUT_MODE="${ROLLOUT_MODE:-sync}"
+# If using 8 GPUs with tensor parallelism, also set:
+#   export ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE=4
+
 export ENABLE_MULTI_TURN="${ENABLE_MULTI_TURN:-False}"
 export MAX_TURN="${MAX_TURN:-1}"
 export VAL_MAX_TURN="${VAL_MAX_TURN:-1}"
+
+# --- Engine cache offload ---
+# Set to True on VRAM-constrained setups (e.g. 8x L40). This frees vLLM
+# engine cache between rollout and training, at the cost of some speed.
 export FREE_CACHE_ENGINE="${FREE_CACHE_ENGINE:-False}"
+
 export ACTOR_PARAMETER_OFFLOAD="${ACTOR_PARAMETER_OFFLOAD:-True}"
 export ACTOR_OPTIMIZER_OFFLOAD="${ACTOR_OPTIMIZER_OFFLOAD:-True}"
 export N_VAL="${N_VAL:-1}"
@@ -120,6 +165,11 @@ export ROLLOUT_MAX_BATCHED_TOKENS="${ROLLOUT_MAX_BATCHED_TOKENS:-1664}"
 export PROMPT_OVERSAMPLING_FACTOR="${PROMPT_OVERSAMPLING_FACTOR:-1.0}"
 export SAMPLE_OVERSAMPLING_FACTOR="${SAMPLE_OVERSAMPLING_FACTOR:-1.0}"
 export WANDB_MODE=offline
+
+# --- CUDA memory allocator ---
+# "expandable_segments:True" is incompatible with vLLM's memory pool on L40 GPUs.
+# If you see "CUDA error: invalid argument" during CUDA malloc, set this to empty:
+#   export PYTORCH_CUDA_ALLOC_CONF=""
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 export HF_HOME="${PROJECT_DIR}/.cache/huggingface"
