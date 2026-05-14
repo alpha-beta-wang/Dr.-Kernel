@@ -357,6 +357,11 @@ def compute_multi_turn_advantage(
     # Back-compatible with trainers that do not compute response mask in fit
     if "response_mask" not in data.batch.keys():
         data.batch["response_mask"] = compute_response_mask(data)
+    if "loss_mask" not in data.batch.keys():
+        data.batch["loss_mask"] = torch.ones(data.batch["response_mask"].shape[0], dtype=torch.long)
+    if "turn_indices" not in data.batch.keys():
+        import torch as _torch
+        data.batch["turn_indices"] = _torch.zeros(data.batch["response_mask"].shape[0], dtype=_torch.long)
 
     if adv_estimator == "grpo":
         # Compute turn-level scores
