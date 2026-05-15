@@ -7,9 +7,10 @@
 #SBATCH -t 0-6:00:00
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:8
+#SBATCH --constraint="L40|L40S"  # 排除A30 24GB节点防止OOM；80GB GPU(A100)可删除此行
 #SBATCH --gres-flags=enforce-binding
-#SBATCH --qos=gpu-normal
-#SBATCH --cpus-per-task=16
+#SBATCH --qos=gpu-short  # gpu-short队列更快(6h上限)；如果eval超6h改回gpu-normal或gpu-long
+#SBATCH --cpus-per-task=32  # Ray + KernelGYM + worker需要较多CPU；如果节点CPU不足可降回16
 
 set -euo pipefail
 
@@ -26,7 +27,7 @@ echo "Host: $(hostname)"
 ulimit -l unlimited
 ulimit -v unlimited
 ulimit -n 65535
-# ulimit -u 4125556  # 注释掉这行
+ulimit -u 65536  # 合理进程数上限；如遇"too many processes"可提高，如遇SIGKILL可降低
 
 source /tools/module_env.sh
 module purge
@@ -43,6 +44,15 @@ export RUN_NAME="drkernel-14b-eval-4gpu"
 export N_GPUS_PER_NODE="${SLURM_GPUS_ON_NODE:-8}"  # 改为8
 export NNODES="${SLURM_NNODES:-1}"
 export GPU_MONITOR_INTERVAL="${GPU_MONITOR_INTERVAL:-60}"
+# ===== Eval调优参数 =====
+# TP=8 与 8-GPU 匹配；4-GPU 场景改为 4，单卡改为 1
+export ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE=8
+# L40 48GB保守值，避免vLLM与FSDP争抢VRAM；A100/L40S可提高到0.74
+export ROLLOUT_GPU_MEMORY_UTIL=0.40
+# Thinking格式prompt超过1024 tokens，需2048；无thinking格式可降到1152
+export MAX_PROMPT_LENGTH=2048
+# 与GPU数量一致；更换GPU数量时同步修改
+export FSDP_SIZE=8
 export N_SAMPLES=4
 export BATCH_SIZE=32
 export WANDB_MODE=offline
