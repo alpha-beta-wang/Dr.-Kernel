@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #SBATCH -J drk-rl
-#SBATCH -o /workspace/I/qimeng6/WangYongsheng/KernelGYM/logs/drk-rl-%j.out
-#SBATCH -e /workspace/I/qimeng6/WangYongsheng/KernelGYM/logs/drk-rl-%j.err
+#SBATCH -o ../logs/drk-rl-%j.out
+#SBATCH -e ../logs/drk-rl-%j.err
 #SBATCH -p r8nv-gpu-hw
 #SBATCH -t 3-00:00:00
 #SBATCH --nodes=1
@@ -107,13 +107,14 @@ nvidia-smi --format=csv --query-gpu=index,name,driver_version,memory.total || tr
 # qimeng6's directories, change PROJECT_DIR and DRKERNEL_DATA_ROOT to your
 # own locations (e.g. /share/personal/S/<user>/KernelGYM-hls/drkernel).
 # Also add: export PATH="$HOME/.local/bin:$PATH" if you have pip user installs.
-PROJECT_DIR="/workspace/I/qimeng6/WangYongsheng/KernelGYM/drkernel"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_DIR}"
 
 export SLURM_GPUS_ON_NODE=16
 # For 8-GPU setup, set SLURM_GPUS_ON_NODE=8 and see batch size / TP notes below.
 
-export DRKERNEL_DATA_ROOT="/nfs_global/I/qimeng6/WangYongsheng/drkernel"
+export DRKERNEL_DATA_ROOT="${DRKERNEL_DATA_ROOT:-/nfs_global/I/${USER}/WangYongsheng/drkernel}"
 export RL_MODEL_PATH="${DRKERNEL_DATA_ROOT}/models/hkust-nlp/drkernel-14b"
 export RUN_NAME="drkernel-14b-rl-4gpu"
 export N_GPUS_PER_NODE="${SLURM_GPUS_ON_NODE:-4}"

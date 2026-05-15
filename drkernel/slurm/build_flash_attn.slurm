@@ -18,10 +18,11 @@ log_section() {
     echo "===== $1 ====="
 }
 
-PROJECT_DIR="/workspace/I/qimeng6/WangYongsheng/KernelGYM/drkernel"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 VENV_DIR="${PROJECT_DIR}/.venv-drkernel"
-SOURCE_DIR="/workspace/I/qimeng6/WangYongsheng/software/flash-attn-src"
-WHEEL_DIR="/workspace/I/qimeng6/WangYongsheng/software/flash-attn-dist"
+SOURCE_DIR="${PROJECT_DIR}/../../software/flash-attn-src"
+WHEEL_DIR="${PROJECT_DIR}/../../software/flash-attn-dist"
 BUILD_ROOT="/tmp/flash-attn-build-${SLURM_JOB_ID}"
 BUILD_SRC="${BUILD_ROOT}/src"
 

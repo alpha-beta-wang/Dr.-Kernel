@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #SBATCH -J kernelgym
-#SBATCH -o ret-%j.out
-#SBATCH -e ret-%j.err
+#SBATCH -o logs/kergym-%j.out
+#SBATCH -e logs/kergym-%j.err
 
 #SBATCH -p r8nv-gpu-hw
 #SBATCH -t 0-12:00:00
@@ -65,9 +65,10 @@ echo "Main program continues to run. Monitoring information will be exported aft
 PROJECT_DIR="${SLURM_SUBMIT_DIR}"
 VENV_DIR="${PROJECT_DIR}/.venv-kgym"
 
-REDIS_BIN="/workspace/I/qimeng6/WangYongsheng/software/redis-7.2.5/src/redis-server"
-REDIS_CLI="/workspace/I/qimeng6/WangYongsheng/software/redis-7.2.5/src/redis-cli"
-export PATH="/workspace/I/qimeng6/WangYongsheng/software/redis-7.2.5/src:${PATH}"
+SOFTWARE_DIR="$(cd "${PROJECT_DIR}/../software" && pwd)"
+REDIS_BIN="${SOFTWARE_DIR}/redis-7.2.5/src/redis-server"
+REDIS_CLI="${SOFTWARE_DIR}/redis-7.2.5/src/redis-cli"
+export PATH="${SOFTWARE_DIR}/redis-7.2.5/src:${PATH}"
 
 cd "${PROJECT_DIR}"
 

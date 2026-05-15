@@ -86,10 +86,11 @@ cluster-quota || true
 nvidia-smi --format=csv --query-gpu=index,name,driver_version,memory.total || true
 nvidia-smi -q -d ECC || true
 
-PROJECT_DIR="/workspace/I/qimeng6/WangYongsheng/KernelGYM/drkernel"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_DIR}"
 
-export DRKERNEL_DATA_ROOT="/nfs_global/I/qimeng6/WangYongsheng/drkernel"
+export DRKERNEL_DATA_ROOT="${DRKERNEL_DATA_ROOT:-/nfs_global/I/${USER}/WangYongsheng/drkernel}"
 export BASE_MODEL_DIR="${DRKERNEL_DATA_ROOT}/models/Qwen/Qwen3-14B-Base"
 export RUN_NAME="drkernel-14b-coldstart-4gpu"
 export GPUS_PER_NODE="${SLURM_GPUS_ON_NODE:-4}"

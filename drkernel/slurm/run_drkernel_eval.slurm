@@ -33,10 +33,11 @@ module purge
 module load cluster-tools/v1.0
 module load slurm-tools/v1.0
 
-PROJECT_DIR="/workspace/I/qimeng6/WangYongsheng/KernelGYM/drkernel"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_DIR}"
 
-export DRKERNEL_DATA_ROOT="/nfs_global/I/qimeng6/WangYongsheng/drkernel"
+export DRKERNEL_DATA_ROOT="${DRKERNEL_DATA_ROOT:-/nfs_global/I/${USER}/WangYongsheng/drkernel}"
 export MODEL_PATH="${DRKERNEL_DATA_ROOT}/models/hkust-nlp/drkernel-14b"
 export RUN_NAME="drkernel-14b-eval-4gpu"
 export N_GPUS_PER_NODE="${SLURM_GPUS_ON_NODE:-8}"  # 改为8
