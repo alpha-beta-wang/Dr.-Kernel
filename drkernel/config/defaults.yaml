@@ -1,0 +1,82 @@
+# Dr.Kernel 默认配置
+# 优先级: CLI --key value > 环境变量 > YAML 默认值
+# 命令行覆盖: eval $(python3 config/load_config.py rl --train-batch-size 32)
+# 环境变量覆盖: export TRAIN_BATCH_SIZE=32 后运行脚本
+
+paths:
+  data_root: "/nfs_global/I/${USER}/WangYongsheng/drkernel"
+
+model:
+  base_repo: "Qwen/Qwen3-14B-Base"
+  eval_repo: "hkust-nlp/drkernel-14b"
+
+# ===== RL 训练参数 =====
+# 8-GPU L40 集群调优值；更多 GPU (16+) 可适当提高 batch/memory
+rl:
+  # Batch — 必须 >= GPU 数量 (FSDP device_mesh 要求)
+  TRAIN_BATCH_SIZE: 2
+  PPO_MINI_BATCH_SIZE: 2
+  # Sequence
+  MAX_PROMPT_LENGTH: 1152
+  MAX_RESPONSE_LENGTH: 512
+  # GPU / Memory
+  ROLLOUT_GPU_MEMORY_UTIL: 0.74
+  ROLLOUT_MAX_BATCHED_TOKENS: 1664
+  PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+  # Training mode
+  ROLLOUT_MODE: "sync"
+  ROLLOUT_N: 1
+  ALGORITHM: "trloo"
+  LEARNING_RATE: 1e-6
+  ENABLE_MULTI_TURN: false
+  MAX_TURN: 1
+  VAL_MAX_TURN: 1
+  FREE_CACHE_ENGINE: false
+  ACTOR_PARAMETER_OFFLOAD: true
+  ACTOR_OPTIMIZER_OFFLOAD: true
+  N_VAL: 1
+  VAL_BEFORE_TRAIN: false
+  ENFORCE_EAGER: true
+  PROMPT_OVERSAMPLING_FACTOR: 1.0
+  SAMPLE_OVERSAMPLING_FACTOR: 1.0
+  REWARD_MANAGER: "kernel_async"
+  REWARD_FUNC_NAME: "calculate_reward_speedup"
+  NUM_PERF_TRIALS: 100
+  IS_GET_LAST_TURN: true
+
+# ===== Eval 参数 =====
+# 8x L40 保守值；A100/L40S 可提高 GPU_MEMORY_UTIL
+eval:
+  N_SAMPLES: 4
+  BATCH_SIZE: 32
+  ROLLOUT_GPU_MEMORY_UTIL: 0.40
+  ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE: 8
+  MAX_PROMPT_LENGTH: 2048
+  FSDP_SIZE: 8
+  MULTI_TURN: true
+  MAX_USER_TURNS: 3
+  NUM_PERF_TRIALS: 10
+  NUM_CORRECT_TRIALS: 5
+  REWARD_MANAGER: "kernel_async"
+  REWARD_FUNC_NAME: "calculate_reward_speedup"
+  REWARD_WEIGHTS: "0.3_0.4_0.3"
+
+# ===== Coldstart (SFT) 参数 =====
+coldstart:
+  TRAIN_BATCH_SIZE: 32
+  MICRO_BATCH_SIZE_PER_GPU: 1
+  MAX_LENGTH: 12288
+  SP_SIZE: 2
+  LEARNING_RATE: 2e-5
+  TOTAL_EPOCHS: 4
+  SAVE_FREQ: 100
+  CPU_OFFLOAD: true
+  OFFLOAD_PARAMS: true
+  PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True,max_split_size_mb:256"
+
+# ===== 集群预设 (仅供 slurm 脚本参考) =====
+cluster:
+  PARTITION: "r8nv-gpu-hw"
+  QOS: "gpu-normal"
+  CPUS_PER_TASK: 16
+  GPU_MONITOR_INTERVAL: 60

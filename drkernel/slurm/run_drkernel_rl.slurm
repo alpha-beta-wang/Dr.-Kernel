@@ -102,15 +102,11 @@ module list || true
 cluster-quota || true
 nvidia-smi --format=csv --query-gpu=index,name,driver_version,memory.total || true
 
-# --- Path configuration ---
-# These paths must be writable by your user. If you don't have access to
-# qimeng6's directories, change PROJECT_DIR and DRKERNEL_DATA_ROOT to your
-# own locations (e.g. /share/personal/S/<user>/KernelGYM-hls/drkernel).
-# Also add: export PATH="$HOME/.local/bin:$PATH" if you have pip user installs.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_DIR}"
 
+# ===== 运行时变量 =====
 export SLURM_GPUS_ON_NODE=16
 # For 8-GPU setup, set SLURM_GPUS_ON_NODE=8 and see batch size / TP notes below.
 
@@ -121,58 +117,20 @@ export N_GPUS_PER_NODE="${SLURM_GPUS_ON_NODE:-4}"
 export NNODES="${SLURM_NNODES:-1}"
 export GPU_MONITOR_INTERVAL="${GPU_MONITOR_INTERVAL:-60}"
 
-# --- Batch size ---
-# TRAIN_BATCH_SIZE and PPO_MINI_BATCH_SIZE must be >= N_GPUS_PER_NODE when
-# running with FSDP + device_mesh, otherwise ppo_mini_batch_size rounds to 0.
-#   16 GPUs → batch >= 16
-#    8 GPUs → batch >= 8
+# ===== Slurm 专属覆盖（覆盖 YAML 默认值） =====
+# 以下参数与 YAML 不同（16-GPU vs 8-GPU tuned），需要显式覆盖
 export TRAIN_BATCH_SIZE=2
 export PPO_MINI_BATCH_SIZE=2
+export ROLLOUT_N=1
+export ENABLE_MULTI_TURN=False
+export MAX_TURN=1
+export ROLLOUT_GPU_MEMORY_UTIL=0.74
+export ROLLOUT_MODE=sync
 
-# --- Sequence lengths ---
-# MAX_RESPONSE_LENGTH can be reduced (e.g. 256) to save VRAM on smaller GPUs.
-# MAX_PROMPT_LENGTH may need to be increased (e.g. 2048) for thinking-format
-# prompts that exceed the default 1152 tokens.
-export MAX_PROMPT_LENGTH="${MAX_PROMPT_LENGTH:-1152}"
-export MAX_RESPONSE_LENGTH="${MAX_RESPONSE_LENGTH:-512}"
+# 其他RL训练参数见 config/defaults.yaml 或 python3 config/load_config.py rl --help
+# Slurm中可通过 export 覆盖YAML默认值（优先级: CLI > env var > YAML）
 
-export ROLLOUT_N="${ROLLOUT_N:-1}"
-
-# --- GPU memory utilization ---
-# Lower this if you see OOM during rollout. Values that work:
-#   0.74  — 16x A100/L40S (plenty of VRAM)
-#   0.50  —  8x L40 (needs FSDP offload headroom)
-export ROLLOUT_GPU_MEMORY_UTIL="${ROLLOUT_GPU_MEMORY_UTIL:-0.74}"
-
-export ROLLOUT_MODE="${ROLLOUT_MODE:-sync}"
-# If using 8 GPUs with tensor parallelism, also set:
-#   export ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE=4
-
-export ENABLE_MULTI_TURN="${ENABLE_MULTI_TURN:-False}"
-export MAX_TURN="${MAX_TURN:-1}"
-export VAL_MAX_TURN="${VAL_MAX_TURN:-1}"
-
-# --- Engine cache offload ---
-# Set to True on VRAM-constrained setups (e.g. 8x L40). This frees vLLM
-# engine cache between rollout and training, at the cost of some speed.
-export FREE_CACHE_ENGINE="${FREE_CACHE_ENGINE:-False}"
-
-export ACTOR_PARAMETER_OFFLOAD="${ACTOR_PARAMETER_OFFLOAD:-True}"
-export ACTOR_OPTIMIZER_OFFLOAD="${ACTOR_OPTIMIZER_OFFLOAD:-True}"
-export N_VAL="${N_VAL:-1}"
-export VAL_BEFORE_TRAIN="${VAL_BEFORE_TRAIN:-False}"
-export ENFORCE_EAGER="${ENFORCE_EAGER:-True}"
-export ROLLOUT_MAX_BATCHED_TOKENS="${ROLLOUT_MAX_BATCHED_TOKENS:-1664}"
-export PROMPT_OVERSAMPLING_FACTOR="${PROMPT_OVERSAMPLING_FACTOR:-1.0}"
-export SAMPLE_OVERSAMPLING_FACTOR="${SAMPLE_OVERSAMPLING_FACTOR:-1.0}"
 export WANDB_MODE=offline
-
-# --- CUDA memory allocator ---
-# "expandable_segments:True" is incompatible with vLLM's memory pool on L40 GPUs.
-# If you see "CUDA error: invalid argument" during CUDA malloc, set this to empty:
-#   export PYTORCH_CUDA_ALLOC_CONF=""
-export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
-
 export HF_HOME="${PROJECT_DIR}/.cache/huggingface"
 export TRANSFORMERS_CACHE="${PROJECT_DIR}/.cache/huggingface/transformers"
 export HUGGINGFACE_HUB_CACHE="${PROJECT_DIR}/.cache/huggingface/hub"
@@ -183,7 +141,6 @@ export TMP="${TMPDIR}"
 export RAY_TMPDIR="${TMPDIR}/ray"
 mkdir -p "${HF_HOME}" "${TRANSFORMERS_CACHE}" "${HUGGINGFACE_HUB_CACHE}" "${TRITON_CACHE_DIR}" "${TMPDIR}"
 
-
 log_section "RUN CONFIG"
 echo "PROJECT_DIR=${PROJECT_DIR}"
 echo "DRKERNEL_DATA_ROOT=${DRKERNEL_DATA_ROOT}"
@@ -191,24 +148,6 @@ echo "RL_MODEL_PATH=${RL_MODEL_PATH}"
 echo "RUN_NAME=${RUN_NAME}"
 echo "N_GPUS_PER_NODE=${N_GPUS_PER_NODE}"
 echo "NNODES=${NNODES}"
-echo "TRAIN_BATCH_SIZE=${TRAIN_BATCH_SIZE}"
-echo "PPO_MINI_BATCH_SIZE=${PPO_MINI_BATCH_SIZE}"
-echo "MAX_PROMPT_LENGTH=${MAX_PROMPT_LENGTH}"
-echo "MAX_RESPONSE_LENGTH=${MAX_RESPONSE_LENGTH}"
-echo "ROLLOUT_N=${ROLLOUT_N}"
-echo "ROLLOUT_GPU_MEMORY_UTIL=${ROLLOUT_GPU_MEMORY_UTIL}"
-echo "ROLLOUT_MODE=${ROLLOUT_MODE}"
-echo "ENABLE_MULTI_TURN=${ENABLE_MULTI_TURN}"
-echo "MAX_TURN=${MAX_TURN}"
-echo "VAL_MAX_TURN=${VAL_MAX_TURN}"
-echo "FREE_CACHE_ENGINE=${FREE_CACHE_ENGINE}"
-echo "ACTOR_PARAMETER_OFFLOAD=${ACTOR_PARAMETER_OFFLOAD}"
-echo "ACTOR_OPTIMIZER_OFFLOAD=${ACTOR_OPTIMIZER_OFFLOAD}"
-echo "N_VAL=${N_VAL}"
-echo "VAL_BEFORE_TRAIN=${VAL_BEFORE_TRAIN}"
-echo "ENFORCE_EAGER=${ENFORCE_EAGER}"
-echo "ROLLOUT_MAX_BATCHED_TOKENS=${ROLLOUT_MAX_BATCHED_TOKENS}"
-echo "PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-unset}"
 echo "GPU_MONITOR_INTERVAL=${GPU_MONITOR_INTERVAL}"
 echo "HF_HOME=${HF_HOME}"
 echo "TMPDIR=${TMPDIR}"

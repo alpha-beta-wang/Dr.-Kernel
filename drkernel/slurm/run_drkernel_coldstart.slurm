@@ -90,22 +90,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_DIR}"
 
+# ===== 路径覆盖（不同于YAML默认值时在此export） =====
 export DRKERNEL_DATA_ROOT="${DRKERNEL_DATA_ROOT:-/nfs_global/I/${USER}/WangYongsheng/drkernel}"
 export BASE_MODEL_DIR="${DRKERNEL_DATA_ROOT}/models/Qwen/Qwen3-14B-Base"
+
+# ===== 运行时变量（每个job不同） =====
 export RUN_NAME="drkernel-14b-coldstart-4gpu"
 export GPUS_PER_NODE="${SLURM_GPUS_ON_NODE:-4}"
 export NNODES="${SLURM_NNODES:-1}"
-export TRAIN_BATCH_SIZE=32
-export MICRO_BATCH_SIZE_PER_GPU=1
-export SP_SIZE=2
-export WANDB_MODE=offline
-export MAX_LENGTH="${MAX_LENGTH:-12288}"
-export SAVE_FREQ="${SAVE_FREQ:-100}"
-export CPU_OFFLOAD="${CPU_OFFLOAD:-True}"
-export OFFLOAD_PARAMS="${OFFLOAD_PARAMS:-True}"
-export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True,max_split_size_mb:256}"
 export GPU_MONITOR_INTERVAL="${GPU_MONITOR_INTERVAL:-60}"
 
+# 其他SFT训练参数见 config/defaults.yaml 或 python3 config/load_config.py coldstart --help
+# Slurm中可通过 export 覆盖YAML默认值（优先级: CLI > env var > YAML）
+
+# ===== 缓存和临时目录 =====
 export HF_HOME="${PROJECT_DIR}/.cache/huggingface"
 export TRANSFORMERS_CACHE="${PROJECT_DIR}/.cache/huggingface/transformers"
 export HUGGINGFACE_HUB_CACHE="${PROJECT_DIR}/.cache/huggingface/hub"
@@ -122,14 +120,6 @@ echo "BASE_MODEL_DIR=${BASE_MODEL_DIR}"
 echo "RUN_NAME=${RUN_NAME}"
 echo "GPUS_PER_NODE=${GPUS_PER_NODE}"
 echo "NNODES=${NNODES}"
-echo "TRAIN_BATCH_SIZE=${TRAIN_BATCH_SIZE}"
-echo "MICRO_BATCH_SIZE_PER_GPU=${MICRO_BATCH_SIZE_PER_GPU}"
-echo "SP_SIZE=${SP_SIZE}"
-echo "MAX_LENGTH=${MAX_LENGTH}"
-echo "SAVE_FREQ=${SAVE_FREQ}"
-echo "CPU_OFFLOAD=${CPU_OFFLOAD}"
-echo "OFFLOAD_PARAMS=${OFFLOAD_PARAMS}"
-echo "PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF}"
 echo "GPU_MONITOR_INTERVAL=${GPU_MONITOR_INTERVAL}"
 echo "HF_HOME=${HF_HOME}"
 echo "TMPDIR=${TMPDIR}"
@@ -184,7 +174,4 @@ gpu_monitor &
 GPU_MONITOR_PID=$!
 
 log_section "START TRAINING"
-# bash "${PROJECT_DIR}/local_ops/run_coldstart.sh" "$@"
-bash "${PROJECT_DIR}/local_ops/run_coldstart.sh" "$@" | awk '{
-    printf "=== [TRAINING INFO] %s %s ===\n", strftime("%Y-%m-%d %H:%M:%S"), $0
-}'
+bash "${PROJECT_DIR}/local_ops/run_coldstart.sh" "$@"

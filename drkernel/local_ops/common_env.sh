@@ -19,7 +19,7 @@ export FLASH_ATTN_CACHE_DIR="${FLASH_ATTN_CACHE_DIR:-${SOFTWARE_ROOT}/flash-attn
 export DRKERNEL_VENV_DIR="${DRKERNEL_VENV_DIR:-${DRKERNEL_ROOT}/.venv-drkernel}"
 export KERNELGYM_VENV_DIR="${KERNELGYM_VENV_DIR:-${KERNELGYM_ROOT}/.venv-kgym}"
 
-export DRKERNEL_DATA_ROOT="${DRKERNEL_DATA_ROOT:-/nfs_global/I/qimeng6/WangYongsheng/drkernel}"
+export DRKERNEL_DATA_ROOT="${DRKERNEL_DATA_ROOT:-/nfs_global/I/${USER}/WangYongsheng/drkernel}"
 export HF_DATA_ROOT="${HF_DATA_ROOT:-${DRKERNEL_DATA_ROOT}/datasets}"
 export HF_MODEL_ROOT="${HF_MODEL_ROOT:-${DRKERNEL_DATA_ROOT}/models}"
 export DRKERNEL_CHECKPOINT_ROOT="${DRKERNEL_CHECKPOINT_ROOT:-${DRKERNEL_DATA_ROOT}/checkpoints}"

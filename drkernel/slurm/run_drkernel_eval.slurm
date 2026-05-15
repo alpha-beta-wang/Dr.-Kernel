@@ -23,7 +23,6 @@ echo "Job start at $(date '+%Y-%m-%d %H:%M:%S')"
 echo "Submit dir: ${SLURM_SUBMIT_DIR}"
 echo "Host: $(hostname)"
 
-# 移除有问题的 ulimit 或降低到合理值
 ulimit -l unlimited
 ulimit -v unlimited
 ulimit -n 65535
@@ -38,39 +37,35 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_DIR}"
 
+# ===== 路径覆盖（不同于YAML默认值时在此export） =====
 export DRKERNEL_DATA_ROOT="${DRKERNEL_DATA_ROOT:-/nfs_global/I/${USER}/WangYongsheng/drkernel}"
 export MODEL_PATH="${DRKERNEL_DATA_ROOT}/models/hkust-nlp/drkernel-14b"
+
+# ===== 运行时变量（每个job不同） =====
 export RUN_NAME="drkernel-14b-eval-4gpu"
-export N_GPUS_PER_NODE="${SLURM_GPUS_ON_NODE:-8}"  # 改为8
+export N_GPUS_PER_NODE="${SLURM_GPUS_ON_NODE:-8}"
 export NNODES="${SLURM_NNODES:-1}"
 export GPU_MONITOR_INTERVAL="${GPU_MONITOR_INTERVAL:-60}"
-# ===== Eval调优参数 =====
-# TP=8 与 8-GPU 匹配；4-GPU 场景改为 4，单卡改为 1
-export ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE=8
-# L40 48GB保守值，避免vLLM与FSDP争抢VRAM；A100/L40S可提高到0.74
-export ROLLOUT_GPU_MEMORY_UTIL=0.40
-# Thinking格式prompt超过1024 tokens，需2048；无thinking格式可降到1152
-export MAX_PROMPT_LENGTH=2048
-# 与GPU数量一致；更换GPU数量时同步修改
-export FSDP_SIZE=8
 export N_SAMPLES=4
 export BATCH_SIZE=32
 export WANDB_MODE=offline
 
-# ===== 关键修改：使用短路径 =====
+# 其他eval调优参数见 config/defaults.yaml 或 python3 config/load_config.py eval --help
+# Slurm中可通过 export 覆盖YAML默认值（优先级: CLI > env var > YAML）
+
+# ===== 临时目录（短路径避免socket AF_UNIX路径过长） =====
 export TMPDIR="/tmp/${USER}/drkernel_${SLURM_JOB_ID}"
 export TEMP="${TMPDIR}"
 export TMP="${TMPDIR}"
 export RAY_TMPDIR="${TMPDIR}/ray"
 
-# HuggingFace 缓存可以用长路径（不受socket限制影响）
+# ===== HuggingFace 缓存 =====
 export HF_HOME="${PROJECT_DIR}/.cache/huggingface"
 export TRANSFORMERS_CACHE="${HF_HOME}/transformers"
 export HUGGINGFACE_HUB_CACHE="${HF_HOME}/hub"
 export TRITON_CACHE_DIR="${PROJECT_DIR}/.cache/triton"
 
-# 创建所有需要的目录
-mkdir -p "${HF_HOME}" "${TRANSFORMERS_CACHE}" "${HUGGINGFACE_HUB_CACHE}" "${TRITON_CACHE_DIR}" 
+mkdir -p "${HF_HOME}" "${TRANSFORMERS_CACHE}" "${HUGGINGFACE_HUB_CACHE}" "${TRITON_CACHE_DIR}"
 mkdir -p "${TMPDIR}" "${RAY_TMPDIR}"
 
 # Ray 调试选项

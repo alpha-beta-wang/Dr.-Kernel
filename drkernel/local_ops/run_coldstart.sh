@@ -6,9 +6,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/common_env.sh"
 
+# --help / -h
+if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
+    python3 "${DRKERNEL_ROOT}/config/load_config.py" coldstart --help
+    exit 0
+fi
+
 activate_drkernel_venv
 ensure_common_dirs
 
+# Load YAML config (skip keys already set in environment)
+eval "$(python3 "${DRKERNEL_ROOT}/config/load_config.py" coldstart "$@")"
+
+# Runtime-derived values
 BASE_MODEL_DIR="${BASE_MODEL_DIR:-${HF_MODEL_ROOT}/${DRKERNEL_BASE_MODEL_REPO}}"
 COLDSTART_DATA_FILE="${COLDSTART_DATA_FILE:-$(resolve_dataset_file "hkust-nlp/drkernel-coldstart-8k")}"
 RUN_NAME="${RUN_NAME:-drkernel-14b-coldstart-local}"
@@ -16,15 +26,6 @@ PROJECT_NAME="${PROJECT_NAME:-kernel-sft}"
 CHECKPOINT_DIR="${CHECKPOINT_DIR:-${DRKERNEL_CHECKPOINT_ROOT}/coldstart}"
 LOG_DIR="${LOG_DIR:-${DRKERNEL_LOG_ROOT}/coldstart}"
 
-TRAIN_BATCH_SIZE="${TRAIN_BATCH_SIZE:-64}"
-MICRO_BATCH_SIZE_PER_GPU="${MICRO_BATCH_SIZE_PER_GPU:-2}"
-MAX_LENGTH="${MAX_LENGTH:-12288}"
-TOTAL_EPOCHS="${TOTAL_EPOCHS:-4}"
-SAVE_FREQ="${SAVE_FREQ:-100}"
-LEARNING_RATE="${LEARNING_RATE:-2e-5}"
-SP_SIZE="${SP_SIZE:-4}"
-CPU_OFFLOAD="${CPU_OFFLOAD:-True}"
-OFFLOAD_PARAMS="${OFFLOAD_PARAMS:-True}"
 GPUS_PER_NODE="${GPUS_PER_NODE:-${SLURM_GPUS_ON_NODE:-${ARNOLD_WORKER_GPU:-8}}}"
 NNODES="${NNODES:-${SLURM_NNODES:-${ARNOLD_WORKER_NUM:-1}}}"
 NODE_RANK="${NODE_RANK:-${SLURM_NODEID:-${ARNOLD_ID:-0}}}"
@@ -43,7 +44,6 @@ if [[ ! -f "${COLDSTART_DATA_FILE}" ]]; then
 fi
 
 export WANDB_MODE="${WANDB_MODE:-offline}"
-export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True,max_split_size_mb:256}"
 export TMPDIR="${TMPDIR:-/tmp/drkernel-coldstart-${SLURM_JOB_ID:-local}}"
 export TEMP="${TEMP:-${TMPDIR}}"
 export TMP="${TMP:-${TMPDIR}}"
