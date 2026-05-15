@@ -19,6 +19,48 @@ log_section() {
     echo "===== $1 ====="
 }
 
+print_error_lines() {
+    local err_log
+    err_log="${PROJECT_DIR:-${SLURM_SUBMIT_DIR:-$(pwd)}}/../logs/drk-eval-${SLURM_JOB_ID:-unknown}.err"
+
+    echo "===== CRITICAL ERROR LOG ====="
+    echo "Error log: ${err_log}"
+    if [[ ! -f "${err_log}" ]]; then
+        echo "error log not found"
+        return
+    fi
+
+    local pattern='error|exception|traceback|fatal|failed|runtimeerror'
+    if grep -Eani "${pattern}" "${err_log}" >/dev/null; then
+        echo "Matched error lines (latest 80):"
+        grep -Eani "${pattern}" "${err_log}" | tail -n 80
+    else
+        echo "No keyword matched, show last 120 lines:"
+        tail -n 120 "${err_log}"
+    fi
+}
+
+on_exit() {
+    local exit_code=$?
+    if declare -F stop_kernelgym_services >/dev/null 2>&1; then
+        stop_kernelgym_services
+    fi
+    if [[ -n "${GPU_MONITOR_PID:-}" ]]; then
+        kill "${GPU_MONITOR_PID}" >/dev/null 2>&1 || true
+    fi
+    log_section "JOB SUMMARY"
+    echo "Exit code: ${exit_code}"
+    echo "End time: $(date '+%Y-%m-%d %H:%M:%S')"
+    if [[ "${exit_code}" -eq 0 ]]; then
+        echo "[SUCCESS] Eval job finished successfully"
+    else
+        echo "[FAILED] Eval job failed"
+        print_error_lines
+    fi
+}
+
+trap on_exit EXIT
+
 echo "Job start at $(date '+%Y-%m-%d %H:%M:%S')"
 echo "Submit dir: ${SLURM_SUBMIT_DIR}"
 echo "Host: $(hostname)"
@@ -33,8 +75,7 @@ module purge
 module load cluster-tools/v1.0
 module load slurm-tools/v1.0
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_DIR="${SLURM_SUBMIT_DIR}"
 cd "${PROJECT_DIR}"
 
 # ===== 路径覆盖（不同于YAML默认值时在此export） =====
@@ -79,7 +120,6 @@ echo "RAY_TMPDIR=${RAY_TMPDIR}"
 
 # shellcheck disable=SC1091
 source "${PROJECT_DIR}/local_ops/start_kernelgym_services.sh"
-trap stop_kernelgym_services EXIT
 start_kernelgym_services
 
 gpu_monitor() {

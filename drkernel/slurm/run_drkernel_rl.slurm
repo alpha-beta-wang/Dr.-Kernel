@@ -10,6 +10,7 @@
 #SBATCH --gres-flags=enforce-binding
 #SBATCH --qos=gpu-long
 #SBATCH --cpus-per-task=16
+#SBATCH --constraint="A100|L40|L40S"  # 排除A30 24GB节点防止OOM
 #
 # --- SLURM tuning for constrained environments ---
 # If you have fewer GPU quota or shorter time limit, adjust these:
@@ -82,8 +83,7 @@ echo "SLURM_GPUS_ON_NODE=${SLURM_GPUS_ON_NODE:-unset}"
 ulimit -l unlimited
 ulimit -v unlimited
 ulimit -n 65535
-ulimit -u 4125556
-# If ulimit -u 4125556 fails on restricted accounts, use: ulimit -u 65535 2>/dev/null || true
+ulimit -u 4125556 2>/dev/null || true
 
 source /tools/module_env.sh
 module purge
@@ -102,30 +102,30 @@ module list || true
 cluster-quota || true
 nvidia-smi --format=csv --query-gpu=index,name,driver_version,memory.total || true
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_DIR="${SLURM_SUBMIT_DIR}"
 cd "${PROJECT_DIR}"
 
 # ===== 运行时变量 =====
-export SLURM_GPUS_ON_NODE=16
-# For 8-GPU setup, set SLURM_GPUS_ON_NODE=8 and see batch size / TP notes below.
+# N_GPUS_PER_NODE 在 sbatch 时通过 --gres=gpu:N 自动推断，也可手动覆盖
+# 优先级: --export=N_GPUS_PER_NODE=N > SLURM_GPUS_ON_NODE > 默认16
+export N_GPUS_PER_NODE="${N_GPUS_PER_NODE:-${SLURM_GPUS_ON_NODE:-16}}"
+export NNODES="${SLURM_NNODES:-1}"
 
 export DRKERNEL_DATA_ROOT="${DRKERNEL_DATA_ROOT:-/nfs_global/I/${USER}/WangYongsheng/drkernel}"
 export RL_MODEL_PATH="${DRKERNEL_DATA_ROOT}/models/hkust-nlp/drkernel-14b"
 export RUN_NAME="drkernel-14b-rl-4gpu"
-export N_GPUS_PER_NODE="${SLURM_GPUS_ON_NODE:-4}"
-export NNODES="${SLURM_NNODES:-1}"
 export GPU_MONITOR_INTERVAL="${GPU_MONITOR_INTERVAL:-60}"
 
 # ===== Slurm 专属覆盖（覆盖 YAML 默认值） =====
 # 以下参数与 YAML 不同（16-GPU vs 8-GPU tuned），需要显式覆盖
-export TRAIN_BATCH_SIZE=2
-export PPO_MINI_BATCH_SIZE=2
-export ROLLOUT_N=1
-export ENABLE_MULTI_TURN=False
-export MAX_TURN=1
-export ROLLOUT_GPU_MEMORY_UTIL=0.74
-export ROLLOUT_MODE=sync
+# 可通过 --export=ALL,KEY=VALUE 在 sbatch 时覆盖
+export TRAIN_BATCH_SIZE="${TRAIN_BATCH_SIZE:-2}"
+export PPO_MINI_BATCH_SIZE="${PPO_MINI_BATCH_SIZE:-2}"
+export ROLLOUT_N="${ROLLOUT_N:-1}"
+export ENABLE_MULTI_TURN="${ENABLE_MULTI_TURN:-False}"
+export MAX_TURN="${MAX_TURN:-1}"
+export ROLLOUT_GPU_MEMORY_UTIL="${ROLLOUT_GPU_MEMORY_UTIL:-0.74}"
+export ROLLOUT_MODE="${ROLLOUT_MODE:-sync}"
 
 # 其他RL训练参数见 config/defaults.yaml 或 python3 config/load_config.py rl --help
 # Slurm中可通过 export 覆盖YAML默认值（优先级: CLI > env var > YAML）

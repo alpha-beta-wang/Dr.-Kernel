@@ -20,9 +20,8 @@ log_section() {
 }
 
 print_error_lines() {
-    local script_dir err_log
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    err_log="${script_dir}/../logs/drk-sft-${SLURM_JOB_ID:-unknown}.err"
+    local err_log
+    err_log="${SLURM_SUBMIT_DIR}/../logs/drk-sft-${SLURM_JOB_ID:-unknown}.err"
 
     echo "===== CRITICAL ERROR LOG ====="
     echo "Error log: ${err_log}"
@@ -86,8 +85,7 @@ cluster-quota || true
 nvidia-smi --format=csv --query-gpu=index,name,driver_version,memory.total || true
 nvidia-smi -q -d ECC || true
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_DIR="${SLURM_SUBMIT_DIR}"
 cd "${PROJECT_DIR}"
 
 # ===== 路径覆盖（不同于YAML默认值时在此export） =====
