@@ -84,6 +84,7 @@ ulimit -l unlimited
 ulimit -v unlimited
 ulimit -n 65535
 ulimit -u 4125556 2>/dev/null || true
+# If ulimit -u 4125556 fails on restricted accounts, use: ulimit -u 65535 2>/dev/null || true
 
 source /tools/module_env.sh
 module purge
