@@ -113,7 +113,7 @@ export N_GPUS_PER_NODE="${N_GPUS_PER_NODE:-${SLURM_GPUS_ON_NODE:-16}}"
 export NNODES="${SLURM_NNODES:-1}"
 
 export DRKERNEL_DATA_ROOT="${DRKERNEL_DATA_ROOT:-/nfs_global/I/${USER}/WangYongsheng/drkernel}"
-export RL_MODEL_PATH="${DRKERNEL_DATA_ROOT}/models/hkust-nlp/drkernel-14b"
+export RL_MODEL_PATH="${RL_MODEL_PATH:-${DRKERNEL_DATA_ROOT}/models/hkust-nlp/drkernel-14b}"
 export RUN_NAME="drkernel-14b-rl-4gpu"
 export GPU_MONITOR_INTERVAL="${GPU_MONITOR_INTERVAL:-60}"
 

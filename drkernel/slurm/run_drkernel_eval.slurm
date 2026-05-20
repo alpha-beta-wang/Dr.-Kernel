@@ -80,7 +80,7 @@ cd "${PROJECT_DIR}"
 
 # ===== 路径覆盖（不同于YAML默认值时在此export） =====
 export DRKERNEL_DATA_ROOT="${DRKERNEL_DATA_ROOT:-/nfs_global/I/${USER}/WangYongsheng/drkernel}"
-export MODEL_PATH="${DRKERNEL_DATA_ROOT}/models/hkust-nlp/drkernel-14b"
+export MODEL_PATH="${MODEL_PATH:-${DRKERNEL_DATA_ROOT}/models/hkust-nlp/drkernel-14b}"
 
 # ===== 运行时变量（每个job不同） =====
 export RUN_NAME="drkernel-14b-eval-4gpu"

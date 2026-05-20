@@ -69,7 +69,7 @@ echo "SLURM_GPUS_ON_NODE=${SLURM_GPUS_ON_NODE:-unset}"
 ulimit -l unlimited
 ulimit -v unlimited
 ulimit -n 65535
-ulimit -u 4125556
+ulimit -u 65536 || true
 
 source /tools/module_env.sh
 module purge
@@ -90,7 +90,7 @@ cd "${PROJECT_DIR}"
 
 # ===== 路径覆盖（不同于YAML默认值时在此export） =====
 export DRKERNEL_DATA_ROOT="${DRKERNEL_DATA_ROOT:-/nfs_global/I/${USER}/WangYongsheng/drkernel}"
-export BASE_MODEL_DIR="${DRKERNEL_DATA_ROOT}/models/Qwen/Qwen3-14B-Base"
+export BASE_MODEL_DIR="${BASE_MODEL_DIR:-${DRKERNEL_DATA_ROOT}/models/Qwen/Qwen3-14B-Base}"
 
 # ===== 运行时变量（每个job不同） =====
 export RUN_NAME="drkernel-14b-coldstart-4gpu"
