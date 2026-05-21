@@ -22,7 +22,7 @@ rl:
   # GPU / Memory
   ROLLOUT_GPU_MEMORY_UTIL: 0.74
   ROLLOUT_MAX_BATCHED_TOKENS: 1664
-  PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+  PYTORCH_CUDA_ALLOC_CONF: ""
   # Training mode
   ROLLOUT_MODE: "sync"
   ROLLOUT_N: 1
