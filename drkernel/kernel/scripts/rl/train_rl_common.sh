@@ -674,6 +674,8 @@ setup_training_environment() {
   echo "PPO_MICRO_TOKEN: $PPO_MICRO_TOKEN"
   LOG_PROB_MICRO_TOKEN=$((PPO_MICRO_TOKEN * 2))
   max_num_batched_tokens=${ROLLOUT_MAX_BATCHED_TOKENS:-$(expr $MAX_PROMPT_LENGTH + $MAX_RESPONSE_LENGTH + 1000)}
+  # chunked prefill requires max_num_batched_tokens >= max_model_len
+  [ "$max_num_batched_tokens" -lt "$MAX_MODEL_LEN" ] && max_num_batched_tokens=$MAX_MODEL_LEN
 
   # calculate the sum of MAX_PROMPT_LENGTH and MAX_RESPONSE_LENGTH
   required_token_length=$((MAX_PROMPT_LENGTH + MAX_RESPONSE_LENGTH))
