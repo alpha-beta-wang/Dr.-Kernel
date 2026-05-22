@@ -19,6 +19,7 @@ rl:
   # Sequence
   MAX_PROMPT_LENGTH: 1152
   MAX_RESPONSE_LENGTH: 512
+  MAX_MODEL_LEN: null  # vLLM max total sequence length, null=auto (prompt+response)
   # GPU / Memory
   ROLLOUT_GPU_MEMORY_UTIL: 0.74
   ROLLOUT_MAX_BATCHED_TOKENS: 1664
@@ -43,6 +44,10 @@ rl:
   REWARD_FUNC_NAME: "calculate_reward_speedup"
   NUM_PERF_TRIALS: 100
   IS_GET_LAST_TURN: true
+  # Checkpoint resume
+  RESUME_PATH: null
+  RESUME_MODE: auto
+  MAX_ACTOR_CKPT_TO_KEEP: null
 
 # ===== Eval 参数 =====
 # 8x L40 保守值；A100/L40S 可提高 GPU_MEMORY_UTIL

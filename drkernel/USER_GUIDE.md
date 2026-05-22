@@ -139,7 +139,11 @@ bash local_ops/run_coldstart.sh \
 | `SP_SIZE` | 2 | Ulysses 序列并行度 |
 | `CPU_OFFLOAD` | true | CPU offload 省显存 |
 | `OFFLOAD_PARAMS` | true | 参数 offload 省显存 |
-| `SAVE_FREQ` | 100 | 每 N 步保存 checkpoint |
+| `SAVE_FREQ` | 30 | 每 N 步保存 checkpoint |
+| `RESUME_PATH` | null | 续训时指向实验目录下的 `global_step_N` 子目录 |
+| `RESUME_MODE` | auto | verl resume 模式: `auto`\|`disable`\|`resume_path` |
+| `MAX_ACTOR_CKPT_TO_KEEP` | null | 最多保留 N 个 actor checkpoint，旧自动删除 (null=保留全部) |
+| `MAX_MODEL_LEN` | null | vLLM max total sequence length，null=auto(prompt+response)，建议设 prompt+response+512 为 chat template 留余量 |
 
 ### GPU 需求
 
@@ -295,6 +299,29 @@ export KERNELGYM_SERVER_URL="http://localhost:10907"
 bash local_ops/run_eval.sh
 ```
 
+### Q9: 从旧实验 checkpoint 续训
+
+RL 训练崩溃后，从之前保存的 checkpoint 续训：
+
+```bash
+# 必须传三个参数：
+#   --resume_mode resume_path    (必须，verl 才会读 resume_from_path)
+#   --resume_path .../global_step_N  (必须包含 global_step_ 字符串)
+#   --save_freq 30               (建议，控制保存频率)
+sbatch --qos=gpu-longlong -t 5-00:00:00 --constraint="L40|L40S" \
+    slurm/run_drkernel_rl_hls.slurm \
+    --save_freq 30 \
+    --resume_mode resume_path \
+    --resume_path /path/to/experiment/global_step_420
+```
+
+**注意**：
+- `resume_from_path` 必须精确到 `global_step_N` 子目录，不能只到实验目录
+- `resume_mode` 默认 `auto` 会忽略 `resume_from_path`，只从 `default_local_dir` 自动检测
+- 续训会加载 model+optimizer+extra state，恢复训练步数、学习率、优化器状态
+- 新检查点会保存在新实验目录下（不覆盖旧实验目录）
+
+
 ### 关键参数
 
 ```bash
@@ -431,3 +458,4 @@ cat results/<RUN_NAME>/metrics.json | python3 -m json.tool
 export MODEL_PATH=/path/to/checkpoints/rl/drkernel-14b-rl-4gpu/global_step_100
 bash local_ops/run_eval.sh
 ```
+

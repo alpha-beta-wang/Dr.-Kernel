@@ -133,6 +133,7 @@ SPEEDUP_THRESHOLD=${SPEEDUP_THRESHOLD:-null}
 
 MAX_PROMPT_LENGTH=${MAX_PROMPT_LENGTH:-1024}
 MAX_RESPONSE_LENGTH=${MAX_RESPONSE_LENGTH:-4096}
+MAX_MODEL_LEN=${MAX_MODEL_LEN:-$((MAX_PROMPT_LENGTH + MAX_RESPONSE_LENGTH + 512))}  # +512 for chat template overhead
 TRAIN_TRUNCATION=${TRAIN_TRUNCATION:-left}
 VALIDATION_TRUNCATION=${VALIDATION_TRUNCATION:-left}
 LEARNING_RATE=${LEARNING_RATE:-1e-6}
@@ -169,7 +170,7 @@ ROLLOUT_GPU_MEMORY_UTIL=${ROLLOUT_GPU_MEMORY_UTIL:-0.75}
 ACTOR_OPTIMIZER_OFFLOAD=${ACTOR_OPTIMIZER_OFFLOAD:-False}
 ACTOR_PARAMETER_OFFLOAD=${ACTOR_PARAMETER_OFFLOAD:-False}
 MODEL_NAME=${MODEL_NAME:-Qwen3-8B-Base}
-SAVE_FREQ=${SAVE_FREQ:-10}
+SAVE_FREQ=${SAVE_FREQ:-30}
 TEST_FREQ=${TEST_FREQ:-10}
 REMOVE_CLIP=${REMOVE_CLIP:-False}
 ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE=${ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE:-1}
@@ -321,6 +322,9 @@ generate_suffix() {
       --max_turn) suffix+="_maxturn$2"; shift 2 ;;
       --val_before_train) suffix+="_valbefore$2"; shift 2 ;;
       --is_get_last_turn) suffix+="_isgetlastturn$2"; shift 2 ;;
+      --resume_path) shift 2 ;;
+      --resume_mode) shift 2 ;;
+      --max_model_len) shift 2 ;;
             *) shift ;;
     esac
   done
@@ -466,6 +470,9 @@ parse_arguments() {
       --reward_shaping) REWARD_SHAPING="$2"; shift 2 ;;
       --unbiased_shaping) UNBIASED_SHAPING="$2"; shift 2 ;;
       --gamma) GAMMA="$2"; shift 2 ;;
+      --resume_path) RESUME_PATH="$2"; shift 2 ;;
+      --resume_mode) RESUME_MODE="$2"; shift 2 ;;
+      --max_model_len) MAX_MODEL_LEN="$2"; shift 2 ;;
       *)
         echo "Unknown option: $1"
         exit 1
@@ -636,6 +643,7 @@ setup_training_environment() {
   echo "Train Batch Size: $TRAIN_BATCH_SIZE"
   echo "Max Prompt Length: $MAX_PROMPT_LENGTH"
   echo "Max Response Length: $MAX_RESPONSE_LENGTH"
+  echo "Max Model Len: $MAX_MODEL_LEN"
   echo "Learning Rate: $LEARNING_RATE"
   echo "PPO Mini Batch Size: $PPO_MINI_BATCH_SIZE"
   echo "KL Loss Coefficient: $KL_LOSS_COEF"
@@ -819,8 +827,12 @@ run_training() {
       trainer.save_freq=$SAVE_FREQ \
       trainer.test_freq=$TEST_FREQ \
       trainer.default_local_dir=$CHECKPOINT_DIR \
-      trainer.total_epochs=$TOTAL_EPOCHS \
+      trainer.resume_from_path=${RESUME_PATH:-null} \
+      trainer.resume_mode=${RESUME_MODE:-auto} \
+      trainer.max_actor_ckpt_to_keep=${MAX_ACTOR_CKPT_TO_KEEP:-null} \
+      actor_rollout_ref.rollout.max_model_len=$MAX_MODEL_LEN \
       trainer.val_only=$VAL_ONLY \
+      trainer.total_epochs=$TOTAL_EPOCHS \
       trainer.max_skip_steps=$MAX_SKIP_STEPS \
       rejection_sampling.enable_two_gate_filter=$ENABLE_TWO_GATE_FILTER \
       rejection_sampling.gate1.enabled=$GATE1_ENABLED \
