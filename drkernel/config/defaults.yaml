@@ -19,7 +19,6 @@ rl:
   # Sequence
   MAX_PROMPT_LENGTH: 1152
   MAX_RESPONSE_LENGTH: 512
-  MAX_MODEL_LEN: null  # vLLM max total sequence length, null=auto (prompt+response)
   # GPU / Memory
   ROLLOUT_GPU_MEMORY_UTIL: 0.74
   ROLLOUT_MAX_BATCHED_TOKENS: 1664

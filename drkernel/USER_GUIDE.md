@@ -143,7 +143,7 @@ bash local_ops/run_coldstart.sh \
 | `RESUME_PATH` | null | 续训时指向实验目录下的 `global_step_N` 子目录 |
 | `RESUME_MODE` | auto | verl resume 模式: `auto`\|`disable`\|`resume_path` |
 | `MAX_ACTOR_CKPT_TO_KEEP` | null | 最多保留 N 个 actor checkpoint，旧自动删除 (null=保留全部) |
-| `MAX_MODEL_LEN` | null | vLLM max total sequence length，null=auto(prompt+response)，建议设 prompt+response+512 为 chat template 留余量 |
+| `MAX_MODEL_LEN` | auto | vLLM max total sequence length，自动计算 prompt+response+512，可通过 --max_model_len 覆盖 |
 
 ### GPU 需求
 
