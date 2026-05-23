@@ -18,7 +18,7 @@ rl:
   PPO_MINI_BATCH_SIZE: 2
   # Sequence
   MAX_PROMPT_LENGTH: 1152
-  MAX_RESPONSE_LENGTH: 512
+  MAX_RESPONSE_LENGTH: 2048  # Qwen3 thinking模型需要空间做推理再生成代码，512 token过小会导致模型思考完后无空间写代码，response被vLLM硬截断，extract_kernel_code提取不到class ModelNew，全部样本preflight失败→0 reward
   # GPU / Memory
   ROLLOUT_GPU_MEMORY_UTIL: 0.74
   ROLLOUT_MAX_BATCHED_TOKENS: 1664

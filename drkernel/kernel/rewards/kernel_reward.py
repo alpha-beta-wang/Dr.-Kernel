@@ -20,6 +20,7 @@ Kernel 奖励函数实现
 import asyncio
 import logging
 import re
+logger = logging.getLogger(__name__)
 from typing import Dict, Any
 from kernel.rewards.reward_client import KernelRewardClient
 
@@ -83,12 +84,14 @@ def extract_kernel_code(solution_str: str) -> str:
         if match:
             return match.group(1).strip()
     
-    # 如果没有找到特定标记，尝试提取最后一个代码块
+    # Fallback 1: try last code block
     code_blocks = re.findall(r"```(?:\w+)?\s*\n?(.*?)```", solution_str, re.DOTALL)
     if code_blocks:
+        logger.warning("extract_kernel_code: no header pattern matched, using last code block (len=%d)", len(code_blocks[-1]))
         return code_blocks[-1].strip()
     
-    # 回退：假设整个响应就是内核代码
+    # Fallback 2: entire response is kernel code (likely extraction failure)
+    logger.warning("extract_kernel_code: no code block found, returning entire response as kernel code (len=%d). This may indicate max_response_length too small or model did not generate code.", len(solution_str))
     return solution_str
 
 def compute_kernel_reward_batch(solution_strs: list, ground_truths: list, entry_points: str, **kwargs) -> list:

@@ -213,7 +213,7 @@ bash local_ops/run_rl.sh --help
 | `TRAIN_BATCH_SIZE` | 2 | 训练 batch size，**必须 >= GPU 数** |
 | `PPO_MINI_BATCH_SIZE` | 2 | PPO mini batch，**必须 >= GPU 数** |
 | `MAX_PROMPT_LENGTH` | 1152 | 最大 prompt 长度 |
-| `MAX_RESPONSE_LENGTH` | 512 | 最大回复长度 |
+| `MAX_RESPONSE_LENGTH` | 2048 | 最大回复长度，过小(如512)会导致thinking模型无空间生成代码，参考 config/defaults.yaml 注释 |
 | `ROLLOUT_GPU_MEMORY_UTIL` | 0.74 | vLLM 显存利用率（48GB 卡慎重） |
 | `ROLLOUT_MODE` | sync | 生成模式 (sync/async_vllm) |
 | `ROLLOUT_N` | 1 | 每条 prompt 生成样本数 |
