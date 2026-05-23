@@ -425,6 +425,7 @@ parse_arguments() {
       --valid_dataset) VALID_DATASET=($2); shift 2 ;;
       --model_name) MODEL_NAME="$2"; shift 2 ;;
       --use_prioritized_sampling) USE_PRIORITIZED_SAMPLING="$2"; shift 2 ;;
+      --model_path) MODEL_PATH="$2"; shift 2 ;;
       --automatic_oversampling) AUTOMATIC_OVERSAMPLING="$2"; shift 2 ;;
       --use_moderate_sampling) USE_MODERATE_SAMPLING="$2"; shift 2 ;;
       --use_refresh_sampling) USE_REFRESH_SAMPLING="$2"; shift 2 ;;
@@ -842,13 +843,87 @@ run_training() {
       rejection_sampling.gate2.enabled=$GATE2_ENABLED \
       rejection_sampling.gate2.instability_threshold=$GATE2_INSTABILITY_THRESHOLD \
       rejection_sampling.log_rejected_samples=$LOG_REJECTED_SAMPLES \
-      rejection_sampling.save_rejection_stats=$SAVE_REJECTION_STATS
+      rejection_sampling.save_rejection_stats=$SAVE_REJECTION_STATS \
+      | python3 ${SCRIPT_DIR}/metrics_filter.py
 }
 
+
+log_training_info() {
+    echo ""
+    echo "======================================================================"
+    echo "                        TRAINING INFORMATION"
+    echo "======================================================================"
+    echo ""
+    echo "---- Resume / Checkpoint ----"
+    echo "  RESUME_MODE:          ${RESUME_MODE:-auto}"
+    echo "  RESUME_PATH:          ${RESUME_PATH:-N/A (fresh training)}"
+    echo "  CHECKPOINT_DIR:       ${CHECKPOINT_DIR}"
+    echo "  SAVE_FREQ:            ${SAVE_FREQ} steps"
+    echo "  MAX_ACTOR_CKPT_TO_KEEP: ${MAX_ACTOR_CKPT_TO_KEEP:-null}"
+    echo ""
+    echo "---- Dataset ----"
+    echo "  TRAIN_FILES:          ${TRAIN_FILES}"
+    echo "  VALID_FILES:          ${VALID_FILES}"
+    echo "  DATASET_FORMAT:       return_raw_chat=${RETURN_RAW_CHAT}, apply_chat_template=${APPLY_CHAT_TEMPLATE}"
+    echo ""
+    echo "---- Model ----"
+    echo "  MODEL_PATH:           ${MODEL_PATH_RESOLVED}"
+    echo "  FIX_QWEN3_CHAT_TEMPLATE: ${FIX_QWEN3_CHAT_TEMPLATE}"
+    echo ""
+    echo "---- Sequence ----"
+    echo "  MAX_PROMPT_LENGTH:    ${MAX_PROMPT_LENGTH}"
+    echo "  MAX_RESPONSE_LENGTH:  ${MAX_RESPONSE_LENGTH}"
+    echo "  MAX_MODEL_LEN:        ${MAX_MODEL_LEN}"
+    echo "  MAX_NUM_BATCHED_TOKENS: ${max_num_batched_tokens}"
+    echo ""
+    echo "---- Training ----"
+    echo "  ALGORITHM:            ${ALGORITHM:-grpo}"
+    echo "  TOTAL_EPOCHS:         ${TOTAL_EPOCHS}"
+    echo "  TRAIN_BATCH_SIZE:     ${TRAIN_BATCH_SIZE}"
+    echo "  PPO_MINI_BATCH_SIZE:  ${PPO_MINI_BATCH_SIZE}"
+    echo "  LEARNING_RATE:        ${LEARNING_RATE}"
+    echo "  LOSS_AGG_MODE:        ${LOSS_AGG_MODE}"
+    echo "  LOSS_SCALE_FACTOR:    ${LOSS_SCALE_FACTOR}"
+    echo "  GRAD_CLIP:            ${GRAD_CLIP}"
+    echo "  BATCH_STD:            ${BATCH_STD:-False}"
+    echo ""
+    echo "---- Rollout ----"
+    echo "  ROLLOUT_MODE:         ${ROLLOUT_MODE}"
+    echo "  ROLLOUT_N:            ${ROLLOUT_N}"
+    echo "  TEMPERATURE:          ${TEMPERATURE}"
+    echo "  TOP_P:                ${TOP_P}"
+    echo "  GPU_MEM_UTIL:         ${ROLLOUT_GPU_MEMORY_UTIL}"
+    echo "  ENFORCE_EAGER:        ${ENFORCE_EAGER}"
+    echo "  FREE_CACHE_ENGINE:    ${FREE_CACHE_ENGINE}"
+    echo "  TP_SIZE:              ${ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE}"
+    echo "  CALCULATE_LOG_PROBS:  ${CALCULATE_LOG_PROBS}"
+    echo ""
+    echo "---- Reward ----"
+    echo "  REWARD_MANAGER:       ${REWARD_MANAGER}"
+    echo "  REWARD_FUNC_NAME:     ${REWARD_FUNC_NAME}"
+    echo "  REWARD_SERVER_URL:    ${REWARD_SERVER_URL}"
+    echo "  SPEEDUP_UPPER_BOUND:  ${SPEEDUP_REWARD_UPPER_BOUND}"
+    echo "  SPEEDUP_LOWER_BOUND:  ${SPEEDUP_REWARD_LOWER_BOUND}"
+    echo "  NUM_PERF_TRIALS:      ${NUM_PERF_TRIALS}"
+    echo "  MAX_CONCURRENT:       ${REWARD_MAX_CONCURRENT}"
+    echo "  TASK_TIMEOUT:         ${REWARD_TASK_TIMEOUT}s"
+    echo ""
+    echo "---- GPU / Memory ----"
+    echo "  N_GPUS_PER_NODE:      ${N_GPUS_PER_NODE}"
+    echo "  NNODES:               ${NNODES}"
+    echo "  PPO_MICRO_TOKEN:      ${PPO_MICRO_TOKEN}"
+    echo "  LOG_PROB_MICRO_TOKEN: ${LOG_PROB_MICRO_TOKEN}"
+    echo "  ACTOR_PARAM_OFFLOAD:  ${ACTOR_PARAMETER_OFFLOAD}"
+    echo "  ACTOR_OPTIM_OFFLOAD:  ${ACTOR_OPTIMIZER_OFFLOAD}"
+    echo ""
+    echo "======================================================================"
+    echo ""
+}
 # Main execution function
 main() {
   parse_arguments "$@"
   setup_training_environment
+  log_training_info
   run_training
 }
 

@@ -58,6 +58,7 @@ on_exit() {
     fi
     if [[ -n "${GPU_MONITOR_PID:-}" ]]; then
         kill "${GPU_MONITOR_PID}" >/dev/null 2>&1 || true
+        echo "GPU monitor log: ${GPU_LOG}"
     fi
     log_section "JOB SUMMARY"
     echo "Exit code: ${exit_code}"
@@ -150,6 +151,10 @@ echo "RUN_NAME=${RUN_NAME}"
 echo "N_GPUS_PER_NODE=${N_GPUS_PER_NODE}"
 echo "NNODES=${NNODES}"
 echo "GPU_MONITOR_INTERVAL=${GPU_MONITOR_INTERVAL}"
+echo "TRAIN_BATCH_SIZE=${TRAIN_BATCH_SIZE}"
+echo "PPO_MINI_BATCH_SIZE=${PPO_MINI_BATCH_SIZE}"
+echo "ROLLOUT_GPU_MEMORY_UTIL=${ROLLOUT_GPU_MEMORY_UTIL}"
+echo "MAX_RESPONSE_LENGTH=${MAX_RESPONSE_LENGTH}"
 echo "HF_HOME=${HF_HOME}"
 echo "TMPDIR=${TMPDIR}"
 
@@ -168,7 +173,8 @@ gpu_monitor() {
     done
 }
 
-gpu_monitor &
+GPU_LOG="${PROJECT_DIR}/../logs/drk-rl-${SLURM_JOB_ID:-local}.gpu"
+gpu_monitor > "${GPU_LOG}" 2>&1 &
 GPU_MONITOR_PID=$!
 
 bash "${PROJECT_DIR}/local_ops/run_rl.sh" "$@"
