@@ -2155,7 +2155,7 @@ def main_task(config):
             # Original logic for single-turn
             output_ids = test_output_gen_batch.batch["responses"]
             output_texts = [
-                self.tokenizer.decode(ids, skip_special_tokens=True)
+                tokenizer.decode(ids, skip_special_tokens=True)
                 for ids in output_ids
             ]
             sample_outputs.extend(output_texts)
@@ -2179,7 +2179,7 @@ def main_task(config):
         test_batch = test_batch.union(test_output_gen_batch)
 
         # reward_tensor = test_batch.batch.pop("token_level_scores")
-        reward_tensor = test_batch.batch["token_level_scores"]
+        reward_tensor = test_batch.batch.get("token_level_scores", torch.zeros(test_batch.batch["responses"].shape[0], 1))
         cur_data_source = test_batch.non_tensor_batch.get(
             "data_source", ["unknown"] * reward_tensor.shape[0]
         )
