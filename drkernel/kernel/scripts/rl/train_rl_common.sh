@@ -673,7 +673,7 @@ setup_training_environment() {
   # set ppo micro token
   PPO_MICRO_TOKEN=$(generate_model_micro_token "$MODEL_NAME")
   echo "PPO_MICRO_TOKEN: $PPO_MICRO_TOKEN"
-  LOG_PROB_MICRO_TOKEN=$((PPO_MICRO_TOKEN * 2))
+  LOG_PROB_MICRO_TOKEN=${LOG_PROB_MICRO_TOKEN:-$((PPO_MICRO_TOKEN * 2))}
   max_num_batched_tokens=${ROLLOUT_MAX_BATCHED_TOKENS:-$(expr $MAX_PROMPT_LENGTH + $MAX_RESPONSE_LENGTH + 1000)}
   # chunked prefill requires max_num_batched_tokens >= max_model_len
   [ "$max_num_batched_tokens" -lt "$MAX_MODEL_LEN" ] && max_num_batched_tokens=$MAX_MODEL_LEN
