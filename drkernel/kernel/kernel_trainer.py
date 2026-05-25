@@ -3333,10 +3333,11 @@ class RayKernelTrainer(RayPPOTrainer):
                         actual_input_ids_size = batch.batch["input_ids"].shape[0]
 
                         if actual_input_ids_size == 0:
-                            raise RuntimeError(
-                                "No valid samples were selected after filtering. "
-                                "Increase rollout number to ensure that there are valid examples for training."
+                            print(
+                                "WARNING: No valid samples were selected after filtering. "
+                                "Skipping this batch. Consider increasing rollout number."
                             )
+                            continue
                         elif actual_input_ids_size < expected_input_ids_size:
                             current_sample_factor = float(
                                 self.config.data.get("prompt_oversampling_factor", 1.0)
