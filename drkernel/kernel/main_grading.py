@@ -2087,12 +2087,18 @@ def main_task(config):
 
         if multi_turn_enabled:
             # For multi-turn, use multiturn_messages to build complete conversations
-            sample_indices = (
-                test_output_gen_batch.batch["sample_indices"].cpu().numpy()
-            )
+            if "sample_indices" in test_output_gen_batch.batch:
+                sample_indices = (
+                    test_output_gen_batch.batch["sample_indices"].cpu().numpy()
+                )
+            else:
+                sample_indices = np.arange(len(test_output_gen_batch.batch))
 
             # print(f"sample_indices before metrics: {sample_indices}")
-            turn_indices = test_output_gen_batch.batch["turn_indices"].cpu().numpy()
+            if "turn_indices" in test_output_gen_batch.batch:
+                turn_indices = test_output_gen_batch.batch["turn_indices"].cpu().numpy()
+            else:
+                turn_indices = np.zeros(len(test_output_gen_batch.batch))
             multiturn_messages = test_output_gen_batch.non_tensor_batch.get(
                 "multiturn_messages", None
             )
@@ -2175,6 +2181,13 @@ def main_task(config):
 
             print(f"[DEBUG] Repeating test_batch by {max_turns} turns for multi-turn union")
             test_batch = test_batch.repeat(repeat_times=max_turns, interleave=True)
+
+        # Compute rewards for sync mode (async modes compute rewards during generation)
+        if not async_rollout_mode:
+            reward_result = reward_fn(test_output_gen_batch)
+            if reward_result is not None:
+                test_output_gen_batch.batch["token_level_scores"] = reward_result["reward_tensor"]
+                test_output_gen_batch.non_tensor_batch["reward_extra_info"] = reward_result["extra_info"]
 
         test_batch = test_batch.union(test_output_gen_batch)
 
