@@ -2182,14 +2182,14 @@ def main_task(config):
             print(f"[DEBUG] Repeating test_batch by {max_turns} turns for multi-turn union")
             test_batch = test_batch.repeat(repeat_times=max_turns, interleave=True)
 
+        test_batch = test_batch.union(test_output_gen_batch)
+
         # Compute rewards for sync mode (async modes compute rewards during generation)
         if not async_rollout_mode:
-            reward_result = reward_fn(test_output_gen_batch)
+            reward_result = reward_fn(test_batch)
             if reward_result is not None:
-                test_output_gen_batch.batch["token_level_scores"] = reward_result["reward_tensor"]
-                test_output_gen_batch.non_tensor_batch["reward_extra_info"] = reward_result["extra_info"]
-
-        test_batch = test_batch.union(test_output_gen_batch)
+                test_batch.batch["token_level_scores"] = reward_result["reward_tensor"]
+                test_batch.non_tensor_batch["reward_extra_info"] = reward_result["extra_info"]
 
         # reward_tensor = test_batch.batch.pop("token_level_scores")
         reward_tensor = test_batch.batch.get("token_level_scores", torch.zeros(test_batch.batch["responses"].shape[0], 1))
