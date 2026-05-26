@@ -2189,7 +2189,13 @@ def main_task(config):
             reward_result = reward_fn(test_batch)
             if reward_result is not None:
                 test_batch.batch["token_level_scores"] = reward_result["reward_tensor"]
-                test_batch.non_tensor_batch["reward_extra_info"] = reward_result["extra_info"]
+                # Convert dict-of-lists to list-of-dicts for downstream processing
+                extra_info_dict = reward_result["extra_info"]
+                keys_list = list(extra_info_dict.keys())
+                if keys_list and len(extra_info_dict[keys_list[0]]) > 0:
+                    n_samples = len(extra_info_dict[keys_list[0]])
+                    extra_info_list = [{k: extra_info_dict[k][i] for k in keys_list} for i in range(n_samples)]
+                    test_batch.non_tensor_batch["reward_extra_info"] = extra_info_list
 
         # reward_tensor = test_batch.batch.pop("token_level_scores")
         reward_tensor = test_batch.batch.get("token_level_scores", torch.zeros(test_batch.batch["responses"].shape[0], 1))
