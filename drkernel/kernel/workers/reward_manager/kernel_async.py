@@ -191,8 +191,84 @@ class AsyncKernelRewardManager:
 
 
 
-    def __call__(self, data, return_dict: bool = True, **kwargs):
+    def __call__(self, *args, **kwargs):
         import json as _json
+
+        # === Detect calling convention ===
+        # DataProto batch (sync eval): __call__(data: DataProto, return_dict=True)
+        # Per-sample async engine: __call__(response_ids, content, ground_truth, entry_point, uuid, ...)
+        if len(args) >= 1 and hasattr(args[0], "batch") and hasattr(args[0], "non_tensor_batch"):
+            data = args[0]
+            return_dict = kwargs.pop("return_dict", True) if "return_dict" in kwargs else (args[1] if len(args) >= 2 else True)
+        elif len(args) >= 5:
+            # Per-sample call from async engine
+            response_ids = args[0]
+            response_str = args[1]
+            ground_truth = args[2]
+            entry_point = args[3]
+            uuid = args[4]
+            return_full_state = kwargs.pop("return_full_state", False) or (args[5] if len(args) >= 6 else False)
+            return_dict = kwargs.pop("return_dict", True)
+            max_response_length = kwargs.get("response_length")
+            vr = len(response_ids) if isinstance(response_ids, (list, tuple)) else int(response_ids.shape[0]) if hasattr(response_ids, "shape") else len(response_ids)
+            if max_response_length is not None:
+                vr = min(vr, int(max_response_length))
+            vr = max(vr, 1)
+            rt = torch.zeros(vr, dtype=torch.float32)
+            rei = {}
+
+            _gt = ground_truth if isinstance(ground_truth, str) else str(ground_truth) if ground_truth else ""
+            _ep = entry_point if isinstance(entry_point, str) else str(entry_point) if entry_point else ""
+            _uid = uuid if isinstance(uuid, str) else str(uuid) if uuid else ""
+            _rids = list(response_ids) if hasattr(response_ids, "tolist") else response_ids
+
+            results = self.execute_env(str(response_str), _gt, _ep, _uid, _rids)
+            sp = results[0].get("speedup", 0.0) or 0.0
+            if sp > self.reward_config.speedup_reward_upper_bound:
+                results = self.execute_env(str(response_str), _gt, _ep, _uid, _rids)
+            result = results[0]
+            sp = result.get("speedup", 0.0) or 0.0
+            score = result.get("score", result.get("reward", 0.0))
+            rt[vr - 1] = score
+            rei["correctness"] = result.get("correctness", False)
+            rei["performance"] = sp
+            rei["is_speedup_positive"] = (sp >= 1.0 + self.reward_config.speedup_eps)
+            rei["is_decoy_kernel"] = result.get("decoy_kernel", False)
+            rei["compilation"] = result.get("compiled", False)
+            rei["success"] = result.get("success", False)
+            rei["status"] = result.get("status", "unknown")
+            rei["error"] = result.get("error")
+            nc = result.get("num_custom_kernel", 0); nt = result.get("num_total_kernels", 0)
+            rei["num_custom_kernel"] = nc; rei["num_total_kernels"] = nt
+            rei["num_coverage"] = float(f"{(nc / nt if nt > 0 else 0):.2f}")
+            ck = result.get("custom_kernel_cuda_time_in_profiling_us", 0); tk = result.get("total_kernel_run_time_in_profiling_us", 0)
+            rei["custom_kernel_cuda_time_in_profiling_us"] = ck; rei["total_kernel_run_time_in_profiling_us"] = tk
+            rei["time_coverage"] = float(f"{(ck / tk if tk > 0 else 0):.2f}")
+            rei["correctness_tensor"] = torch.tensor([float(result.get("correctness", False))])
+            rei["performance_tensor"] = torch.tensor([float(sp)])
+            rei["compilation_tensor"] = torch.tensor([float(result.get("compiled", False))])
+            if self.print_status:
+                self.logger.info(
+                    "[KernelEvalStatus] idx=0"
+                    " status=" + str(rei.get("status", "unknown")) +
+                    " compiled=" + str(rei.get("compilation", False)) +
+                    " correct=" + str(rei.get("correctness", False)) +
+                    " speedup=" + str(sp) +
+                    " uuid=" + str(uuid) +
+                    " entry=" + str(entry_point) +
+                    " error=" + str(rei.get("error"))
+                )
+            if return_dict:
+                ret = {"reward_tensor": rt, "reward_extra_info": rei}
+                if return_full_state:
+                    ret["env_state"] = result
+                return ret
+            return (rt, rei, result) if return_full_state else (rt, rei)
+        else:
+            # Fallback: keyword-arg per-sample call (existing behavior)
+            data = args[0] if len(args) >= 1 else None
+            return_dict = args[1] if len(args) >= 2 else True
+
         if hasattr(data, "batch") and hasattr(data, "non_tensor_batch"):
             if "rm_scores" in data.batch.keys():
                 return {"reward_tensor": data.batch["rm_scores"]} if return_dict else data.batch["rm_scores"]
