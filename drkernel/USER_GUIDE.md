@@ -210,117 +210,84 @@ bash local_ops/run_rl.sh --help
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `TRAIN_BATCH_SIZE` | 2 | 训练 batch size，**必须 >= GPU 数** |
-| `PPO_MINI_BATCH_SIZE` | 2 | PPO mini batch，**必须 >= GPU 数** |
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `TRAIN_BATCH_SIZE` | 16 | 训练 batch size，**必须 >= GPU 数** |
+| `PPO_MINI_BATCH_SIZE` | 16 | PPO mini batch，**必须 >= GPU 数** |
 | `MAX_PROMPT_LENGTH` | 1152 | 最大 prompt 长度 |
-| `MAX_RESPONSE_LENGTH` | 2048 | 最大回复长度，过小(如512)会导致thinking模型无空间生成代码，参考 config/defaults.yaml 注释 |
-| `ROLLOUT_GPU_MEMORY_UTIL` | 0.74 | vLLM 显存利用率（48GB 卡慎重） |
+| `MAX_RESPONSE_LENGTH` | 16384 | 最大回复长度，Qwen3 thinking模型需要空间做推理再生成代码 |
+| `ROLLOUT_GPU_MEMORY_UTIL` | 0.35 | vLLM 显存利用率（L40S 48GB保守值，A100可提高） |
+| `ROLLOUT_MAX_BATCHED_TOKENS` | 1664 | vLLM 单 batch 最大 token 数 |
 | `ROLLOUT_MODE` | sync | 生成模式 (sync/async_vllm) |
-| `ROLLOUT_N` | 1 | 每条 prompt 生成样本数 |
+| `ROLLOUT_N` | 16 | 每条 prompt 生成样本数 |
 | `ALGORITHM` | trloo | RL 算法 |
 | `LEARNING_RATE` | 1e-6 | 学习率 |
 | `ENABLE_MULTI_TURN` | false | 多轮对话 |
+| `MAX_TURN` | 1 | 最大对话轮次 |
+| `VAL_MAX_TURN` | 1 | 验证时最大轮次 |
 | `ACTOR_PARAMETER_OFFLOAD` | true | Actor 参数 CPU offload |
 | `ACTOR_OPTIMIZER_OFFLOAD` | true | 优化器状态 CPU offload |
-| `FREE_CACHE_ENGINE` | false | 训练前释放 vLLM 缓存 |
-
-### GPU 需求
-
-- **最低**: 8× L40 (48GB)，需调低 `ROLLOUT_GPU_MEMORY_UTIL`
-- **推荐**: 8-16× A100 (80GB)
-- **重要**: `TRAIN_BATCH_SIZE` 和 `PPO_MINI_BATCH_SIZE` 必须 >= GPU 数量，否则 FSDP device_mesh 分配会归零报错
-
-### 资源受限场景
-
-Slurm 脚本内置了调优注释，常见调整：
-
-```bash
-# 场景：只有 8 GPU 配额 + 6h 时间限制
-sbatch --gres=gpu:8 \
-       --qos=gpu-short \
-       -t 6:00:00 \
-       --cpus-per-task=16 \
-       --export=ALL,N_GPUS_PER_NODE=8,TRAIN_BATCH_SIZE=8,PPO_MINI_BATCH_SIZE=8,ROLLOUT_GPU_MEMORY_UTIL=0.50 \
-       slurm/run_drkernel_rl.slurm
-```
-
+| `FREE_CACHE_ENGINE` | false | 训练前释放 vLLM KV cache |
+| `ENFORCE_EAGER` | true | 禁用 CUDA graph（兼容性） |
+| `N_VAL` | 1 | 验证样本数 |
+| `VAL_BEFORE_TRAIN` | false | 训练前先验证 |
+| `PROMPT_OVERSAMPLING_FACTOR` | 1.0 | prompt 过采样倍数 |
+| `SAMPLE_OVERSAMPLING_FACTOR` | 1.0 | 样本过采样倍数 |
+| `REWARD_MANAGER` | kernel_async | 奖励管理器类型 |
+| `REWARD_FUNC_NAME` | calculate_reward_speedup | 奖励函数名 |
+| `NUM_PERF_TRIALS` | 100 | 性能测试次数 |
+| `IS_GET_LAST_TURN` | true | 只取最后一轮结果 |
+| `RESUME_PATH` | null | 续训 checkpoint 路径 |
+| `RESUME_MODE` | auto | resume 模式 |
+| `MAX_ACTOR_CKPT_TO_KEEP` | null | 最多保留 checkpoint 数 |
+| `PYTORCH_CUDA_ALLOC_CONF` | "" | CUDA 内存分配策略 |
 ---
 
 ## 5. 模块三：Evaluation 评估
 
 ### 用途
 
-评估模型的内核生成质量，输出 Pass@1、Score、编译率、加速比等指标。
+评估 RL/SFT 模型在 KernelGYM 验证集上的表现，计算 pass@k、compilation rate、correctness rate、speedup 等指标。
 
 ### 前置条件
 
+- 已有模型（SFT 或 RL checkpoint）
 - KernelGYM 服务运行中
-- 待评估模型存在
 
 ### 输入
 
 | 项目 | 路径 |
 |------|------|
-| 待评估模型 | `DRKERNEL_DATA_ROOT/models/hkust-nlp/drkernel-14b`（或其他） |
+| 模型 | `DRKERNEL_DATA_ROOT/models/hkust-nlp/drkernel-14b`（可覆盖） |
 | 验证数据 | `DRKERNEL_DATA_ROOT/datasets/hkust-nlp/drkernel-validation-data/` |
 
 ### 输出
 
-| 项目 | 路径 | 格式 |
-|------|------|------|
-| 评分结果 | `results/<RUN_NAME>/graded_results.parquet` | Parquet |
-| 原始响应 | `results/<RUN_NAME>/raw_responses.jsonl` | JSONL |
-| 评估指标 | `results/<RUN_NAME>/metrics.json` | JSON |
-| 详细输出 | `results/<RUN_NAME>/eval_outputs/` | 目录 |
-
-**metrics.json 包含：**
-- `pass@1` — 通过率
-- `score` — 综合评分
-- `compile_rate` — 编译成功率
-- `correctness` — 正确率
-- `mean_speedup` — 平均加速比
-- `positive_speedup_rate` — 正向加速比比例
+| 项目 | 路径 |
+|------|------|
+| 评测结果 | `DRKERNEL_DATA_ROOT/results/<RUN_NAME>/` |
+| 日志 | `../logs/drk-eval-<jobid>.out` |
 
 ### 启动方式
 
 **Slurm 集群（推荐）：**
 ```bash
-# 默认 8 GPU
+# 单轮 eval（默认，对齐论文 kernel_grading.yaml）
 sbatch slurm/run_drkernel_eval.slurm
 
-# 自定义模型和输出
-sbatch --export=ALL,MODEL_PATH=/path/to/checkpoint,RUN_NAME=my-eval \
+# 指定数据/模型路径
+sbatch --export=ALL,DRKERNEL_DATA_ROOT=/your/path,MODEL_PATH=/your/model \
+       slurm/run_drkernel_eval.slurm
+
+# 多轮 eval（通过 CLI 覆盖 YAML 默认值）
+sbatch --export=ALL,MULTI_TURN=True,MAX_USER_TURNS=3,ROLLOUT_MODE=async_vllm \
        slurm/run_drkernel_eval.slurm
 ```
 
-**本地调试：**
-```bash
-export KERNELGYM_SERVER_URL="http://localhost:10907"
-bash local_ops/run_eval.sh
-```
-
-### Q9: 从旧实验 checkpoint 续训
-
-RL 训练崩溃后，从之前保存的 checkpoint 续训：
-
-```bash
-# 必须传三个参数：
-#   --resume_mode resume_path    (必须，verl 才会读 resume_from_path)
-#   --resume_path .../global_step_N  (必须包含 global_step_ 字符串)
-#   --save_freq 30               (建议，控制保存频率)
-sbatch --qos=gpu-longlong -t 5-00:00:00 --constraint="L40|L40S" \
-    slurm/run_drkernel_rl_hls.slurm \
-    --save_freq 30 \
-    --resume_mode resume_path \
-    --resume_path /path/to/experiment/global_step_420
-```
-
-**注意**：
-- `resume_from_path` 必须精确到 `global_step_N` 子目录，不能只到实验目录
-- `resume_mode` 默认 `auto` 会忽略 `resume_from_path`，只从 `default_local_dir` 自动检测
-- 续训会加载 model+optimizer+extra state，恢复训练步数、学习率、优化器状态
-- 新检查点会保存在新实验目录下（不覆盖旧实验目录）
-
+**参数优先级：** CLI > env var > YAML。Slurm 脚本不硬编码参数，所有 eval 参数通过以下方式设定：
+- `config/defaults.yaml` — 默认值（已对齐论文）
+- `sbatch --export=ALL,KEY=VALUE` — 临时覆盖
+- 透传 CLI 参数给 `run_eval.sh`
 
 ### 关键参数
 
@@ -331,131 +298,104 @@ bash local_ops/run_eval.sh --help
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `N_SAMPLES` | 4 | 每样例生成次数 |
-| `BATCH_SIZE` | 32 | 评估 batch size |
-| `ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE` | 8 | TP 大小 (= GPU 数) |
-| `FSDP_SIZE` | 8 | FSDP 分片数 (= GPU 数) |
-| `ROLLOUT_GPU_MEMORY_UTIL` | 0.40 | vLLM 显存利用率（eval 比训练保守） |
-| `MAX_PROMPT_LENGTH` | 2048 | 最大 prompt 长度（需 >= thinking format ~1400 tokens） |
-| `MULTI_TURN` | true | 多轮评估 |
-| `MAX_USER_TURNS` | 3 | 最大用户轮次 |
-| `NUM_PERF_TRIALS` | 10 | 性能测试次数 |
-| `NUM_CORRECT_TRIALS` | 5 | 正确性测试次数 |
-| `REWARD_WEIGHTS` | "0.3_0.4_0.3" | 速度/正确性/编译 权重 |
+| `N_SAMPLES` | 4 | 每题生成样本数 |
+| `BATCH_SIZE` | 32 | 推理 batch size |
+| `ROLLOUT_GPU_MEMORY_UTIL` | 0.40 | vLLM 显存利用率（L40S保守值） |
+| `ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE` | 8 | 张量并行度（L40S需8卡TP，A100可设1） |
+| `MAX_PROMPT_LENGTH` | 20480 | 最大prompt长度。多轮对话历史逐轮累积，设太小(<8192)上下文被截断→越改越烂 |
+| `MAX_RESPONSE_LENGTH` | 8192 | 最大回复长度。Qwen3 thinking模型输出分析→代码→建议，设太小(4096)导致98.5%截断 |
+| `FSDP_SIZE` | 8 | FSDP 分片数 |
+| `MULTI_TURN` | false | 多轮对话模式。论文模型设计为多轮迭代优化，单轮结果显著差于多轮 |
+| `MAX_USER_TURNS` | 1 | 最大用户轮次（多轮时设 3+） |
+| `NUM_PERF_TRIALS` | 100 | 性能测试重复次数，论文用100次保证统计稳定性 |
+| `NUM_CORRECT_TRIALS` | 5 | 正确性测试重复次数 |
+| `REWARD_MANAGER` | kernel_async | 奖励管理器类型 |
+| `REWARD_FUNC_NAME` | calculate_reward_speedup | 奖励函数名 |
+| `REWARD_WEIGHTS` | "0.3_0.4_0.3" | 奖励权重（正确性_加速比_编译） |
+
+### 评测指标
+
+| 指标 | 说明 |
+|------|------|
+| pass@k | 每题生成k条，至少1条通过的比例（编译+正确+加速>=0.99） |
+| Total Score | 加权总分（0.4×正确 + 0.3×加速） |
+| Compilation Rate | 生成代码能通过 nvcc 编译的比例 |
+| Correctness Rate | 编译通过后输出结果正确的比例 |
+| Speedup Positive | 加速比 > 1.0 的比例 |
+| Avg Speedup | 所有样本加速比的均值 |
+| Coverage | 覆盖的 kernel 种类/耗时占比 |
 
 ### GPU 需求
 
-- **最低**: 8× L40 (48GB)
-- **推荐**: 8× A100 (80GB)
-- FSDP_SIZE 和 TP_SIZE 需要等于 GPU 数量
-- 评估比训练省显存（无优化器状态），GPU_MEMORY_UTIL=0.40 已够用
+- **最低**: 4× L40S (48GB)
+- **推荐**: 8× L40S（需要 TP=8 放整个模型）或 1× A100 (80GB, TP=1)
 
 ---
 
 ## 6. 配置系统
 
-### 三层优先级
+### 参数优先级
 
 ```
-CLI --key value  >  环境变量 export  >  YAML 默认值 (config/defaults.yaml)
+CLI 参数 (--key value)  >  环境变量 (export KEY=VALUE)  >  YAML 默认值 (config/defaults.yaml)
 ```
 
-### 方式一：命令行覆盖（最高优先级）
+### 修改默认值
+
+编辑 `config/defaults.yaml` 中对应的节（`rl`/`eval`/`coldstart`），然后提交。
+
+### 临时覆盖
 
 ```bash
-bash local_ops/run_rl.sh --train-batch-size 32 --learning-rate 5e-7
-bash local_ops/run_eval.sh --n-samples 8 --batch-size 64
-bash local_ops/run_coldstart.sh --total-epochs 8
+# 方式1: 环境变量覆盖
+export TRAIN_BATCH_SIZE=8
+bash local_ops/run_rl.sh
+
+# 方式2: CLI 覆盖
+bash local_ops/run_rl.sh --train-batch-size 8
+
+# 方式3: sbatch 时覆盖
+sbatch --export=ALL,TRAIN_BATCH_SIZE=8 slurm/run_drkernel_rl.slurm
 ```
 
-### 方式二：环境变量
+### YAML 结构
 
-```bash
-export TRAIN_BATCH_SIZE=32
-bash local_ops/run_rl.sh  # 使用 env var 值，跳过 YAML
-```
-
-### 方式三：修改 YAML 默认值
-
-编辑 `config/defaults.yaml` 中对应模式的参数。
-
-### 方式四：Slurm --export
-
-```bash
-sbatch --export=ALL,TRAIN_BATCH_SIZE=8,N_GPUS_PER_NODE=8 slurm/run_drkernel_rl.slurm
-```
-
-### 查看所有可配参数
-
-```bash
-python3 config/load_config.py rl --help        # RL 参数
-python3 config/load_config.py eval --help      # Eval 参数
-python3 config/load_config.py coldstart --help # Coldstart 参数
+```yaml
+paths:
+  data_root: "/nfs_global/I/${USER}/WangYongsheng/drkernel"
+model:
+  base_repo: "Qwen/Qwen3-14B-Base"
+  eval_repo: "hkust-nlp/drkernel-14b"
+rl: {...}        # RL 训练参数
+eval: {...}      # 评估参数
+coldstart: {...} # SFT 参数
+cluster: {...}   # 集群预设
 ```
 
 ---
 
 ## 7. 常见问题
 
-### Q1: 显存不足 (OOM)
+### Slurm 脚本不应硬编码参数
 
-**症状**: `torch.OutOfMemoryError`
+参数来源必须单一。Slurm 脚本只负责：SBATCH headers、路径设置、基础设施（TMPDIR、HF_HOME）。模型/训练/评估参数全部通过 YAML 或 CLI 设置。
 
-**解决**:
-- 降低 `ROLLOUT_GPU_MEMORY_UTIL`（RL: 0.74→0.50, Eval: 0.40→0.30）
-- 增加 GPU 数量（TP size 也随之调整）
-- 排除 A30 节点 (`--constraint="A100|L40|L40S"`)
-- 确保 `ACTOR_PARAMETER_OFFLOAD=true` 和 `ACTOR_OPTIMIZER_OFFLOAD=true`
-- Coldstart: 确认 `CPU_OFFLOAD=true`, `OFFLOAD_PARAMS=true`
+### 显存不足 (CUDA OOM)
 
-### Q2: ppo_mini_batch_size = 0
+1. 降低 `ROLLOUT_GPU_MEMORY_UTIL`（0.35 → 0.30 → 0.25）
+2. 增大 `ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE`（4 → 8）
+3. 降低 `MAX_RESPONSE_LENGTH`（但 thinking 模型至少 4096）
+4. 设置 `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
+5. 开启 `FREE_CACHE_ENGINE=true`
 
-**症状**: batch_size 被 FSDP 分配到 0
+### DRKERNEL_DATA_ROOT 权限错误
 
-**原因**: `TRAIN_BATCH_SIZE // N_GPUS_PER_NODE < 1` → 向下取整为 0
+默认路径 `/nfs_global/I/` 可能需要特定权限。用 `--export=ALL,DRKERNEL_DATA_ROOT=/your/path` 覆盖。
 
-**解决**: 确保 `TRAIN_BATCH_SIZE >= N_GPUS_PER_NODE`，且 `PPO_MINI_BATCH_SIZE >= N_GPUS_PER_NODE`
+### multi-turn UID broadcast 错误
 
-### Q3: Eval 100 样本全部被过滤
+`ValueError: UID broadcast shape (768,) vs (256,)` — 设置 `ENABLE_MULTI_TURN=False`。多轮 eval 不受此 bug 影响（eval 路径不同）。
 
-**症状**: DataProto.concat 空列表，无样本进入评估
+### Qwen3 thinking 模型 response 截断
 
-**原因**: `MAX_PROMPT_LENGTH` 太小（如 1024），thinking format prompt 实际有 1048-1368 tokens
-
-**解决**: 设置 `MAX_PROMPT_LENGTH=2048`
-
-### Q4: BASH_SOURCE[0] 路径错误
-
-**症状**: `mkdir: cannot create directory '/var/spool/slurmd/.../.cache'`
-
-**原因**: Slurm 拷贝脚本到临时目录执行，`BASH_SOURCE[0]` 不再指向原路径
-
-**解决**: 已修复 — slurm 脚本使用 `${SLURM_SUBMIT_DIR}` 定位项目目录
-
-### Q5: SLURM_GPUS_ON_NODE 为空
-
-**原因**: 集群的 `slurm-tools/v1.0` 模块会清除该变量
-
-**解决**: 脚本已使用 fallback 链 `${N_GPUS_PER_NODE:-${SLURM_GPUS_ON_NODE:-N}}`，可通过 `--export=N_GPUS_PER_NODE=8` 手动指定
-
-### Q6: r8l40s-a05 ECC 错误
-
-**症状**: `CUDA error: uncorrectable ECC error encountered`
-
-**原因**: 该节点 GPU 硬件故障
-
-**解决**: `--exclude=r8l40s-a05`（Coldstart 已默认排除）
-
-### Q7: 查看某次运行的指标
-
-```bash
-cat results/<RUN_NAME>/metrics.json | python3 -m json.tool
-```
-
-### Q8: 使用 RL checkpoint 做评估
-
-```bash
-export MODEL_PATH=/path/to/checkpoints/rl/drkernel-14b-rl-4gpu/global_step_100
-bash local_ops/run_eval.sh
-```
-
+症状：`finish_reason=length` 比例极高(>50%)。根因：`MAX_RESPONSE_LENGTH` 太小。Qwen3 输出结构为「分析推理→代码生成→优化建议」，至少需要 8192 token。
