@@ -11,21 +11,16 @@ model:
   eval_repo: "hkust-nlp/drkernel-14b"
 
 # ===== RL 训练参数 =====
-# 8-GPU L40 集群调优值；更多 GPU (16+) 可适当提高 batch/memory
 rl:
-  # Batch — 必须 >= GPU 数量 (FSDP device_mesh 要求)
-  TRAIN_BATCH_SIZE: 2
-  PPO_MINI_BATCH_SIZE: 2
-  # Sequence
+  TRAIN_BATCH_SIZE: 16
+  PPO_MINI_BATCH_SIZE: 16
   MAX_PROMPT_LENGTH: 1152
-  MAX_RESPONSE_LENGTH: 2048  # Qwen3 thinking模型需要空间做推理再生成代码，512 token过小会导致模型思考完后无空间写代码，response被vLLM硬截断，extract_kernel_code提取不到class ModelNew，全部样本preflight失败→0 reward
-  # GPU / Memory
-  ROLLOUT_GPU_MEMORY_UTIL: 0.74
+  MAX_RESPONSE_LENGTH: 16384
+  ROLLOUT_GPU_MEMORY_UTIL: 0.35
   ROLLOUT_MAX_BATCHED_TOKENS: 1664
   PYTORCH_CUDA_ALLOC_CONF: ""
-  # Training mode
   ROLLOUT_MODE: "sync"
-  ROLLOUT_N: 1
+  ROLLOUT_N: 16
   ALGORITHM: "trloo"
   LEARNING_RATE: 1e-6
   ENABLE_MULTI_TURN: false
@@ -43,26 +38,31 @@ rl:
   REWARD_FUNC_NAME: "calculate_reward_speedup"
   NUM_PERF_TRIALS: 100
   IS_GET_LAST_TURN: true
-  # Checkpoint resume
   RESUME_PATH: null
   RESUME_MODE: auto
   MAX_ACTOR_CKPT_TO_KEEP: null
 
-# ===== Eval 参数 =====
-# 8x L40 保守值；A100/L40S 可提高 GPU_MEMORY_UTIL
+# ===== Eval 参数（对齐论文 kernel_grading.yaml） =====
+# 论文默认: max_prompt_length=20480, max_response_length=8192, num_perf_trials=100
+# GPU_MEMORY_UTIL/TENSOR_PARALLEL_SIZE 按 L40S 8卡调优（A100可设 0.9 / 1）
+# 多轮eval通过 run_drkernel_eval_multiturn.slurm CLI覆盖 MULTI_TURN/MAX_USER_TURNS
 eval:
   N_SAMPLES: 4
   BATCH_SIZE: 32
   ROLLOUT_GPU_MEMORY_UTIL: 0.40
   ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE: 8
-  # multi-turn 每轮累积执行反馈到prompt中，3轮需要~8K上下文；Qwen3 thinking模型分析推理消耗大量token
-  MAX_PROMPT_LENGTH: 8192
-  # Qwen3 thinking生成analysis→code→notes，多轮需根据反馈重分析，4096导致98.5%截断（Job 761105 finish_reason/length=0.985）
+  # 多轮对话历史逐轮累积(model output + tool feedback)，3轮轻松超10K token。
+  # 设太小(<8192)前轮上下文被截断，模型看不到自己写的代码和反馈→越改越烂。
+  # 单轮无所谓但也不会浪费——prompt padding到max_prompt_length不会增加计算量。
+  MAX_PROMPT_LENGTH: 20480
+  # Qwen3 thinking模型输出结构: 分析推理→代码生成→优化建议。
+  # 设太小(4096)导致98.5%样本截断(finish_reason=length)，代码不完整→编译率暴跌。
   MAX_RESPONSE_LENGTH: 8192
   FSDP_SIZE: 8
-  MULTI_TURN: true
-  MAX_USER_TURNS: 3
-  NUM_PERF_TRIALS: 10
+  MULTI_TURN: false
+  MAX_USER_TURNS: 1
+  # 论文用100次trials测性能稳定性，10次噪声太大
+  NUM_PERF_TRIALS: 100
   NUM_CORRECT_TRIALS: 5
   REWARD_MANAGER: "kernel_async"
   REWARD_FUNC_NAME: "calculate_reward_speedup"
@@ -81,7 +81,7 @@ coldstart:
   OFFLOAD_PARAMS: true
   PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True,max_split_size_mb:256"
 
-# ===== 集群预设 (仅供 slurm 脚本参考) =====
+# ===== 集群预设 =====
 cluster:
   PARTITION: "r8nv-gpu-hw"
   QOS: "gpu-normal"
