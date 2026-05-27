@@ -90,7 +90,7 @@ export HF_HOME="${PROJECT_DIR}/.cache/huggingface"
 export TRANSFORMERS_CACHE="${HF_HOME}/.cache/huggingface/transformers"
 export HUGGINGFACE_HUB_CACHE="${HF_HOME}/hub"
 export TRITON_CACHE_DIR="${PROJECT_DIR}/.cache/triton"
-export TMPDIR="/tmp/${USER}/drkernel-coldstart-${SLURM_JOB_ID:-local}"
+export TMPDIR="/tmp/${USER}/drc-${SLURM_JOB_ID:-local}"
 export TEMP="${TMPDIR}"
 export TMP="${TMPDIR}"
 
