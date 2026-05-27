@@ -93,12 +93,13 @@ export HF_HOME="${PROJECT_DIR}/.cache/huggingface"
 export TRANSFORMERS_CACHE="${HF_HOME}/transformers"
 export HUGGINGFACE_HUB_CACHE="${HF_HOME}/hub"
 export TRITON_CACHE_DIR="${PROJECT_DIR}/.cache/triton"
+export VLLM_CACHE_ROOT="${PROJECT_DIR}/.cache/vllm"
 export TMPDIR="/tmp/${USER}/dre-${SLURM_JOB_ID:-local}"
 export TEMP="${TMPDIR}"
 export TMP="${TMPDIR}"
 export RAY_TMPDIR="${TMPDIR}/ray"
 
-mkdir -p "${HF_HOME}" "${TRANSFORMERS_CACHE}" "${HUGGINGFACE_HUB_CACHE}" "${TRITON_CACHE_DIR}"
+mkdir -p "${HF_HOME}" "${TRANSFORMERS_CACHE}" "${HUGGINGFACE_HUB_CACHE}" "${TRITON_CACHE_DIR}" "${VLLM_CACHE_ROOT}"
 mkdir -p "${TMPDIR}" "${RAY_TMPDIR}"
 
 export RAY_LOG_TO_STDERR=1
