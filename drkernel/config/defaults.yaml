@@ -55,7 +55,10 @@ eval:
   BATCH_SIZE: 32
   ROLLOUT_GPU_MEMORY_UTIL: 0.40
   ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE: 8
-  MAX_PROMPT_LENGTH: 2048
+  # multi-turn 每轮累积执行反馈到prompt中，3轮需要~8K上下文；Qwen3 thinking模型分析推理消耗大量token
+  MAX_PROMPT_LENGTH: 8192
+  # Qwen3 thinking生成analysis→code→notes，多轮需根据反馈重分析，4096导致98.5%截断（Job 761105 finish_reason/length=0.985）
+  MAX_RESPONSE_LENGTH: 8192
   FSDP_SIZE: 8
   MULTI_TURN: true
   MAX_USER_TURNS: 3
