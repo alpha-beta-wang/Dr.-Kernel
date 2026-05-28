@@ -81,7 +81,7 @@ export N_GPUS_PER_NODE="${N_GPUS_PER_NODE:-${SLURM_GPUS_ON_NODE:-8}}"
 export NNODES="${SLURM_NNODES:-1}"
 export DRKERNEL_DATA_ROOT="${DRKERNEL_DATA_ROOT:-/nfs_global/I/${USER}/WangYongsheng/drkernel}"
 export MODEL_PATH="${MODEL_PATH:-${DRKERNEL_DATA_ROOT}/models/hkust-nlp/drkernel-14b}"
-export RUN_NAME="drkernel-14b-eval-8gpu"
+export RUN_NAME="drkernel-14b-eval-8gpu-${SLURM_JOB_ID:-local}"
 export GPU_MONITOR_INTERVAL="${GPU_MONITOR_INTERVAL:-60}"
 export WANDB_MODE=offline
 
