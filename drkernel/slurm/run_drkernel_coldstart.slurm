@@ -78,7 +78,7 @@ export GPUS_PER_NODE="${GPUS_PER_NODE:-${SLURM_GPUS_ON_NODE:-4}}"
 export NNODES="${SLURM_NNODES:-1}"
 export DRKERNEL_DATA_ROOT="${DRKERNEL_DATA_ROOT:-/nfs_global/I/${USER}/WangYongsheng/drkernel}"
 export BASE_MODEL_DIR="${BASE_MODEL_DIR:-${DRKERNEL_DATA_ROOT}/models/Qwen/Qwen3-14B-Base}"
-export RUN_NAME="drkernel-14b-coldstart-4gpu"
+export RUN_NAME="${RUN_NAME:-$(basename "${BASE_MODEL_DIR}")-sft-${SLURM_JOB_ID}}"
 export GPU_MONITOR_INTERVAL="${GPU_MONITOR_INTERVAL:-60}"
 export WANDB_MODE=offline
 

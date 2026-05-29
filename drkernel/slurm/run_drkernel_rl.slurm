@@ -4,11 +4,11 @@
 #SBATCH -o ../logs/drk-rl-%j.out
 #SBATCH -e ../logs/drk-rl-%j.err
 #SBATCH -p r8nv-gpu-hw
-#SBATCH -t 3-00:00:00
+#SBATCH -t 5-00:00:00
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:8
 #SBATCH --gres-flags=enforce-binding
-#SBATCH --qos=gpu-long
+#SBATCH --qos=gpu-longlong
 #SBATCH --cpus-per-task=32
 #SBATCH --constraint="A100|L40|L40S"
 
@@ -81,7 +81,7 @@ export N_GPUS_PER_NODE="${N_GPUS_PER_NODE:-${SLURM_GPUS_ON_NODE:-8}}"
 export NNODES="${SLURM_NNODES:-1}"
 export DRKERNEL_DATA_ROOT="${DRKERNEL_DATA_ROOT:-/nfs_global/I/${USER}/WangYongsheng/drkernel}"
 export RL_MODEL_PATH="${RL_MODEL_PATH:-${DRKERNEL_DATA_ROOT}/models/hkust-nlp/drkernel-14b}"
-export RUN_NAME="drkernel-14b-rl-8gpu"
+export RUN_NAME="${RUN_NAME:-$(basename "${RL_MODEL_PATH}")-rl-${SLURM_JOB_ID}}"
 export GPU_MONITOR_INTERVAL="${GPU_MONITOR_INTERVAL:-60}"
 export WANDB_MODE=offline
 
