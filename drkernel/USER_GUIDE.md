@@ -10,6 +10,7 @@
 2. [数据目录结构](#2-数据目录结构)
 3. [模块一：Coldstart (SFT 冷启动)](#3-模块一coldstart-sft-冷启动)
 4. [模块二：RL 训练](#4-模块二rl-训练)
+4.5 [PPO Smoketest (显存验证)](#45-ppo-smoketest-显存验证)
 5. [模块三：Evaluation 评估](#5-模块三evaluation-评估)
 6. [配置系统](#6-配置系统)
 7. [常见问题](#7-常见问题)
@@ -242,6 +243,102 @@ bash local_ops/run_rl.sh --help
 | `MAX_ACTOR_CKPT_TO_KEEP` | null | 最多保留 checkpoint 数 |
 | `PYTORCH_CUDA_ALLOC_CONF` | "" | CUDA 内存分配策略 |
 ---
+
+## 4.5 PPO Smoketest (显存验证)
+
+### 用途
+
+在正式启动 RL 训练前，用与 verl 完全一致的 FSDP mesh 模式验证 GPU 显存是否够用。避免因参数配置不当导致训练运行数小时后 CUDA OOM。
+
+**核心价值**：3 分钟跑完 vs RL 训练 6-8 小时后 OOM，极大缩短排错周期。
+
+### 前置条件
+
+- 已有 RL 初始模型（SFT checkpoint 或 HuggingFace 模型）
+- 8x L40S GPU（脚本默认，可改 WORLD_SIZE）
+
+### 输入
+
+| 项目 | 说明 |
+|------|------|
+| 模型 | 通过 `RL_MODEL_PATH` 环境变量指定（默认 coldstart checkpoint） |
+| 环境变量 | 见下方参数表 |
+
+### 输出
+
+| 项目 | 说明 |
+|------|------|
+| 显存报告 | 每步显存占用（模型创建、FSDP wrap、offload/load、PPO fwd/bwd） |
+| 判定结果 | PASS（margin > 15%）/ MARGINAL（8-15%）/ OOM RISK（< 8%） |
+| 日志 | `../logs/ppo-smoketest-<jobid>.out` |
+
+### 启动方式
+
+**Slurm 集群（推荐）：**
+
+```bash
+# 默认参数（SP=1, grad_ckpt=1, micro=9344）
+sbatch slurm/run_ppo_smoketest.slurm
+
+# 指定模型路径
+sbatch --export=ALL,RL_MODEL_PATH=/your/model/path slurm/run_ppo_smoketest.slurm
+
+# 测试不同参数组合
+sbatch --export=ALL,SP_SIZE=1,PPO_MICRO_TOKEN=9344,ROLLOUT_N=16,MAX_RESPONSE_LENGTH=8192 slurm/run_ppo_smoketest.slurm
+```
+
+**本地调试：**
+
+```bash
+torchrun --nproc_per_node=8 --master_port=29501 local_ops/ppo_smoketest.py
+```
+
+### 关键参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `SP_SIZE` | 1 | Ulysses 序列并行度。**设为 2 会产生 ~22G NCCL all-to-all 开销（2.3x 显存），7B/14B 在 L40S 上不需要 SP** |
+| `PPO_MICRO_TOKEN` | 9344 | micro batch 大小（token）。减小无助于省显存（micro_bs 不能 < 1） |
+| `MAX_RESPONSE_LENGTH` | 8192 | 最大回复长度。7B smoketest 默认 8192，14B 可用 16384 |
+| `MAX_PROMPT_LENGTH` | 1152 | 最大 prompt 长度 |
+| `ROLLOUT_N` | 8 | 每条 prompt 生成样本数 |
+| `PPO_MINI_BATCH_SIZE` | 16 | PPO mini batch |
+| `TRAIN_BATCH_SIZE` | 16 | 训练 batch size |
+| `USE_GRAD_CKPT` | 1 | 梯度检查点（建议始终开启） |
+| `SKIP_MONKEY_PATCH` | 1 | 跳过 Ulysses monkey patch（SP=1 时不需要） |
+| `USE_REMOVE_PADDING` | 0 | 是否移除 padding |
+
+### 验证原理
+
+Smoketest 精确复现 verl 的 FSDP mesh 模式：
+- **FSDP mesh**: 1D `(8,)` dim `"fsdp"` — 用于 FSDP wrap
+- **SP mesh**: 2D `(4,2)` dims `("dp","sp")` — 仅 Ulysses SP 使用
+- FSDP 和 SP 使用**两个独立的 device mesh**，共用 mesh 导致 `_broadcast_coalesced` OOM
+
+### 结果解读
+
+```
+PPO SMOKE TEST RESULTS
+GPU total:      47.66 GiB
+Peak allocated: 17.34 GiB
+Margin:         30.32 GiB (63.6%)
+Config: MICRO=9344 SP=1 SEQ=9344
+Status:         PASS
+```
+
+- **PASS**: margin > 15%，可以安全启动 RL 训练
+- **MARGINAL**: margin 8-15%，训练可能成功但建议降低参数
+- **OOM RISK**: margin < 8%，贸然启动大概率 OOM
+
+### 已知结论
+
+| 配置 | 峰值显存 | SP 开销 | 判定 |
+|------|----------|---------|------|
+| SP=1, micro=9344, SEQ=9344 | 17.34 GiB | — | **PASS** |
+| SP=2, micro=9344, SEQ=9344 | 40.00 GiB | +22.66 GiB | OOM RISK |
+| SP=1, micro=16384, SEQ=17536 | ~20 GiB | — | **PASS** |
+
+> **核心结论**：SP=2 是历史 RL OOM 的根因。SP_SIZE=1 是 L40S 上 7B/14B RL 训练的正确选择。
 
 ## 5. 模块三：Evaluation 评估
 
