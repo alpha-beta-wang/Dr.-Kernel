@@ -13,6 +13,8 @@ Invariant: task_timeout_in_client >= task_timeout (client waits longer due to qu
 
 from __future__ import annotations
 
+import json
+import os
 import asyncio
 import time
 import logging
@@ -43,9 +45,31 @@ class _HybridHttpWorker:
             headers={"Content-Type": "application/json"},
         )
         self._rate_limit_worker = TokenBucketWorker.options(name="rate-limiter", get_if_exists=True).remote(rate_limit)
+        self._result_cache = None
 
     def _backoff(self, attempt: int, base: int = 2, cap: int = 30) -> float:
         return min(base ** attempt, cap)
+
+    def _load_result_cache(self):
+        if self._result_cache is not None:
+            return
+        self._result_cache = {}
+        cache_file = os.environ.get("REWARD_CACHE_FILE", "")
+        if cache_file and os.path.exists(cache_file):
+            loaded = 0
+            with open(cache_file) as f:
+                for line in f:
+                    try:
+                        entry = json.loads(line)
+                        if entry.get("status") == "completed":
+                            tid = entry.get("task_id", "")
+                            # "parallel_task_000001_22447ea0" -> key: "parallel_task_000001"
+                            key = tid.rsplit("_", 1)[0] if "_" in tid else tid
+                            self._result_cache[key] = entry
+                            loaded += 1
+                    except Exception:
+                        pass
+            print("[HybridWorker] Loaded {} cached results from {}".format(loaded, cache_file))
 
     def get_token_in_use(self) -> int:
         try:
@@ -119,6 +143,14 @@ class _HybridHttpWorker:
 
             # Poll status at a fixed 1s interval.
             task_id = task_data.get("task_id", "")
+            # Check result cache (skip KernelGYM API if cached)
+            self._load_result_cache()
+            cache_key = task_id.rsplit("_", 1)[0] if "_" in task_id else task_id
+            if cache_key in self._result_cache:
+                cached = dict(self._result_cache[cache_key])
+                cached["task_id"] = task_id
+                cached["_from_cache"] = True
+                return cached
             last_status = None
             while time.time() - start_ts < client_timeout:
                 try:
@@ -138,6 +170,18 @@ class _HybridHttpWorker:
                                 if r.status_code == 200:
                                     result = r.json()
                                     result["status"] = status
+                                    # Save result to JSONL (non-breaking: silently ignore failures)
+                                    _save_dir = os.environ.get("REWARD_RESULT_DIR", "/tmp/kgym_results")
+                                    os.makedirs(_save_dir, exist_ok=True)
+                                    _save_file = os.path.join(_save_dir, "rollout_" + os.environ.get("SLURM_JOB_ID", "unknown") + ".jsonl")
+                                    try:
+                                        _entry = dict(result)
+                                        _entry["task_id"] = task_id
+                                        with open(_save_file, "a") as _f:
+                                            _f.write(json.dumps(_entry, ensure_ascii=False) + "
+")
+                                    except Exception:
+                                        pass
                                     return result
                                 return {"status": status, "error_message": f"Failed to fetch results: HTTP {r.status_code}"}
                             return {"status": status, "error_message": data.get("error_message", f"Task {status}")}

@@ -16,19 +16,26 @@ DRKERNEL_ROOT=/share/personal/S/huanglongsheng/KernelGYM-hls/drkernel
 DRKERNEL_DATA_ROOT=/share/personal/S/huanglongsheng/drkernel_data
 RL_MODEL_PATH=/share/personal/S/huanglongsheng/drkernel_data/checkpoints/coldstart/global_step_300-sft-761600/global_step_600
 
-export PPO_MICRO_TOKEN=9344
-export SP_SIZE=2
-export TRAIN_BATCH_SIZE=16
-export ROLLOUT_N=8
-export PPO_MINI_BATCH_SIZE=16
-export MAX_PROMPT_LENGTH=1152
-export MAX_RESPONSE_LENGTH=8192
+# All parameters support --export override
+export PPO_MICRO_TOKEN=${PPO_MICRO_TOKEN:-9344}
+export SP_SIZE=${SP_SIZE:-1}
+export TRAIN_BATCH_SIZE=${TRAIN_BATCH_SIZE:-16}
+export ROLLOUT_N=${ROLLOUT_N:-8}
+export PPO_MINI_BATCH_SIZE=${PPO_MINI_BATCH_SIZE:-16}
+export MAX_PROMPT_LENGTH=${MAX_PROMPT_LENGTH:-1152}
+export MAX_RESPONSE_LENGTH=${MAX_RESPONSE_LENGTH:-8192}
+export ROLLOUT_GPU_MEMORY_UTIL=${ROLLOUT_GPU_MEMORY_UTIL:-0.35}
+export ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE=${ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE:-4}
+export NUM_STEPS=${NUM_STEPS:-2}
+export SKIP_MONKEY_PATCH=${SKIP_MONKEY_PATCH:-1}
+export USE_GRAD_CKPT=${USE_GRAD_CKPT:-1}
 export RL_MODEL_PATH
 export DRKERNEL_DATA_ROOT
 
 cd "${DRKERNEL_ROOT}"
 
 echo "Starting PPO smoke test on $(hostname) at $(date)"
+echo "Config: SP_SIZE=${SP_SIZE} ROLLOUT_N=${ROLLOUT_N} MINI_BS=${PPO_MINI_BATCH_SIZE} TP=${ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE} gpu_util=${ROLLOUT_GPU_MEMORY_UTIL} NUM_STEPS=${NUM_STEPS}"
 nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader
 
 torchrun --nproc_per_node=8 --master_port=29501 local_ops/ppo_smoketest.py
