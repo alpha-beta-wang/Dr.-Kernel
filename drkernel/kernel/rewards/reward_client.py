@@ -150,6 +150,16 @@ class _HybridHttpWorker:
                 cached = dict(self._result_cache[cache_key])
                 cached["task_id"] = task_id
                 cached["_from_cache"] = True
+                # Also save cached result to new rollout file
+                _save_dir = os.environ.get("REWARD_RESULT_DIR", "/tmp/kgym_results")
+                os.makedirs(_save_dir, exist_ok=True)
+                _save_file = os.path.join(_save_dir, "rollout_" + os.environ.get("SLURM_JOB_ID", "unknown") + ".jsonl")
+                try:
+                    _entry = dict(cached)
+                    with open(_save_file, "a") as _f:
+                        _f.write(json.dumps(_entry, ensure_ascii=False) + "\n")
+                except Exception:
+                    pass
                 return cached
             last_status = None
             while time.time() - start_ts < client_timeout:
@@ -178,8 +188,7 @@ class _HybridHttpWorker:
                                         _entry = dict(result)
                                         _entry["task_id"] = task_id
                                         with open(_save_file, "a") as _f:
-                                            _f.write(json.dumps(_entry, ensure_ascii=False) + "
-")
+                                            _f.write(json.dumps(_entry, ensure_ascii=False) + "\n")
                                     except Exception:
                                         pass
                                     return result
