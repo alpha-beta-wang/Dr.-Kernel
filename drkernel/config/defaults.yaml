@@ -39,7 +39,7 @@ rl:
   NUM_PERF_TRIALS: 100
   IS_GET_LAST_TURN: true
   SP_SIZE: 1
-  ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE: 8
+  ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE: 4
   PPO_MICRO_TOKEN: 9344
   LOG_PROB_MICRO_TOKEN: 9344
   RESUME_PATH: null
@@ -55,7 +55,7 @@ eval:
   N_SAMPLES: 4
   BATCH_SIZE: 32
   ROLLOUT_GPU_MEMORY_UTIL: 0.40
-  ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE: 8
+  ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE: 4
   # 多轮对话历史逐轮累积(model output + tool feedback)，3轮轻松超10K token。
   # 设太小(<8192)前轮上下文被截断，模型看不到自己写的代码和反馈→越改越烂。
   # 单轮无所谓但也不会浪费——prompt padding到max_prompt_length不会增加计算量。
