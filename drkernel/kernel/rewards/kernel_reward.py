@@ -204,3 +204,6 @@ def compute_kernel_reward_batch(solution_strs: list, ground_truths: list, entry_
             }
             for _ in solution_strs
         ]
+
+# Mark as batch-capable: can process all tasks in one call
+compute_kernel_reward_batch._is_batch = True

@@ -282,18 +282,24 @@ class AsyncKernelRewardManager:
             valid_response_length = data.batch["attention_mask"][:, prompt_length:].sum(dim=-1)
             reward_tensor = torch.zeros_like(data.batch["responses"], dtype=torch.float32)
             reward_extra_info = {"correctness": [], "performance": [], "is_speedup_positive": [], "is_decoy_kernel": [], "compilation": [], "success": [], "status": [], "error": [], "num_custom_kernel": [], "num_total_kernels": [], "num_coverage": [], "custom_kernel_cuda_time_in_profiling_us": [], "total_kernel_run_time_in_profiling_us": [], "time_coverage": [], "correctness_tensor": [], "performance_tensor": [], "compilation_tensor": []}
+            # ---- Dr.Kernel FIX: batch all samples for parallel evaluation ----
+            safe_kwargs = {"reward_config": self.reward_config, "is_valid": self.is_valid}
+            all_results = self.compute_score(
+                list(sequences_strs), ground_truths, entry_points,
+                uuids=uuids,
+                **safe_kwargs
+            )
             for i in range(len(data)):
-                rids = response_ids[i].tolist() if hasattr(response_ids[i], "tolist") else response_ids[i]
-                results = self.execute_env(sequences_strs[i], ground_truths[i], entry_points[i], str(uuids[i]) if uuids[i] else str(i), rids)
-                result = results[0]
-                score = result.get("score", result.get("reward", 0.0))
+                result = all_results[i]
                 speedup = result.get("speedup", 0.0) or 0.0
                 if speedup > self.reward_config.speedup_reward_upper_bound:
                     print(f"[DEBUG] speedup is anomaly large, re-execute the environment")
-                    results = self.execute_env(sequences_strs[i], ground_truths[i], entry_points[i], str(uuids[i]) if uuids[i] else str(i), rids)
-                    result = results[0]
+                    rids = response_ids[i].tolist() if hasattr(response_ids[i], "tolist") else response_ids[i]
+                    re_results = self.execute_env(sequences_strs[i], ground_truths[i], entry_points[i], str(uuids[i]) if uuids[i] else str(i), rids)
+                    result = re_results[0]
                     speedup = result.get("speedup", 0.0) or 0.0
-                    score = result.get("score", result.get("reward", 0.0))
+                score = result.get("score", result.get("reward", 0.0))
+
                 ti = int(valid_response_length[i].item()) - 1
                 if ti >= 0:
                     reward_tensor[i, ti] = score
